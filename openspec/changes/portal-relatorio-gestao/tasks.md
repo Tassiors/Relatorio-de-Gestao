@@ -22,14 +22,14 @@
 
 ## 4. Frontend Vue 3 (Vite + Tailwind + Pinia)
 
-- [ ] 4.1 Criar serviÃƒÂ§os de API (`src/services/`) e stores Pinia para gestÃƒÂ£o do estado de relatÃƒÂ³rios, unidades e notificaÃƒÂ§ÃƒÂµes.
-- [ ] 4.2 Desenvolver a tela principal com a Matriz UORG x Bimestre, exibindo status operacional por cores, filtros por GerÃƒÂªncia e indicadores resumidos de Home.
-- [ ] 4.3 Desenvolver a tela de preenchimento do formulÃƒÂ¡rio bimestral com autosave, checklist de entregas, preenchimento de indicadores com operador de faixa e campos de Destaques/Dificuldades.
-- [ ] 4.4 Desenvolver a tela de visualizaÃƒÂ§ÃƒÂ£o consolidada com navegaÃƒÂ§ÃƒÂ£o sequencial entre relatÃƒÂ³rios e painel de feedback institucional.
-- [ ] 4.5 Desenvolver tela administrativa para configuraÃƒÂ§ÃƒÂ£o do calendÃƒÂ¡rio anual e concessÃƒÂ£o de prazo excepcional com formulÃƒÂ¡rio exigindo justificativa obrigatÃƒÂ³ria.
-- [ ] 4.6 Gerar build de produÃƒÂ§ÃƒÂ£o do frontend (`npm run build`) para `src/static/dist` e validar carregamento integrado no FastAPI.
+- [x] 4.1 Criar serviÃƒÂ§os de API (`src/services/`) e stores Pinia para gestÃƒÂ£o do estado de relatÃƒÂ³rios, unidades e notificaÃƒÂ§ÃƒÂµes.
+- [x] 4.2 Desenvolver a tela principal com a Matriz UORG x Bimestre, exibindo status operacional por cores, filtros por GerÃƒÂªncia e indicadores resumidos de Home.
+- [x] 4.3 Desenvolver a tela de preenchimento do formulÃƒÂ¡rio bimestral com autosave, checklist de entregas, preenchimento de indicadores com operador de faixa e campos de Destaques/Dificuldades.
+- [x] 4.4 Desenvolver a tela de visualizaÃƒÂ§ÃƒÂ£o consolidada com navegaÃƒÂ§ÃƒÂ£o sequencial entre relatÃƒÂ³rios e painel de feedback institucional.
+- [x] 4.5 Desenvolver tela administrativa para configuraÃƒÂ§ÃƒÂ£o do calendÃƒÂ¡rio anual e concessÃƒÂ£o de prazo excepcional com formulÃƒÂ¡rio exigindo justificativa obrigatÃƒÂ³ria.
+- [x] 4.6 Gerar build de produÃƒÂ§ÃƒÂ£o do frontend (`npm run build`) para `src/static/dist` e validar carregamento integrado no FastAPI.
 
 ## 5. Testes Automatizados e Fechamento
 
 - [x] 5.1 Criar suÃƒÂ­te de testes com pytest cobrindo as regras funcionais (RN-ORG-01 a RN-NFR-02) e verificar aprovaÃƒÂ§ÃƒÂ£o completa dos testes.
-- [ ] 5.2 Executar validaÃƒÂ§ÃƒÂ£o final do OpenSpec (`openspec validate portal-relatorio-gestao`) e `python audit_framework.py .`, garantindo conformidade e estabilidade.
+- [x] 5.2 Executar validaÃƒÂ§ÃƒÂ£o final do OpenSpec (`openspec validate portal-relatorio-gestao`) e `python audit_framework.py .`, garantindo conformidade e estabilidade.

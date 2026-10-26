@@ -3,9 +3,11 @@ import { useAuthStore } from '../stores/auth';
 import Home from '../views/Home.vue';
 import Login from '../views/Login.vue';
 import Configuracoes from '../views/Configuracoes.vue';
-
 import Exemplos from '../views/Exemplos.vue';
-import Pacientes from '../views/Pacientes.vue';
+import MatrizAcompanhamento from '../views/MatrizAcompanhamento.vue';
+import PreenchimentoBimestral from '../views/PreenchimentoBimestral.vue';
+import ConsolidadoGestao from '../views/ConsolidadoGestao.vue';
+import GestaoExercicio from '../views/GestaoExercicio.vue';
 
 const routes = [
   {
@@ -20,19 +22,37 @@ const routes = [
     meta: { layout: 'LoginLayout' },
   },
   {
+    path: '/matriz',
+    name: 'Matriz de Acompanhamento',
+    component: MatrizAcompanhamento,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/preenchimento',
+    name: 'Preenchimento Bimestral',
+    component: PreenchimentoBimestral,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/consolidado',
+    name: 'Visão Consolidada',
+    component: ConsolidadoGestao,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/gestao-exercicio',
+    name: 'Gestão de Exercício e Prazos',
+    component: GestaoExercicio,
+    meta: { requiresAuth: true },
+  },
+  {
     path: '/componentes',
     name: 'Componentes',
     component: Exemplos,
   },
   {
-    path: '/exemplo',
-    name: 'Exemplo',
-    component: Pacientes,
-    meta: { requiresAuth: true },
-  },
-  {
     path: '/configuracoes',
-    name: 'Configuracoes',
+    name: 'Configurações',
     component: Configuracoes,
     meta: { requiresAuth: true },
   },
@@ -46,7 +66,6 @@ const router = createRouter({
 });
 
 router.beforeEach((to, _from, next: NavigationGuardNext) => {
-  // Pinia store must be used inside a function to ensure it's initialized
   const authStore = useAuthStore();
 
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
