@@ -6,7 +6,7 @@ import os
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 
-# Carrega as variáveis de ambiente do arquivo .env
+# Carrega as variÃƒÂ¡veis de ambiente do arquivo .env
 load_dotenv()
 
 from .resources.database import DatabaseManager, Base
@@ -50,13 +50,13 @@ from .version import VERSION, APP_NAME
 
 app = FastAPI(
     title=APP_NAME,
-    description="Framework Monolítico Padrão (API REST FastAPI + Vue 3 SPA) para desenvolvimento de sistemas no HC-UFPE.",
+    description="Framework MonolÃƒÂ­tico PadrÃƒÂ£o (API REST FastAPI + Vue 3 SPA) para desenvolvimento de sistemas no HC-UFPE.",
     version=VERSION,
     swagger_ui_parameters={"persistAuthorization": True},
     lifespan=lifespan,
 )
 
-# Configuração de CORS (Cross-Origin Resource Sharing)
+# ConfiguraÃƒÂ§ÃƒÂ£o de CORS (Cross-Origin Resource Sharing)
 raw_origins = os.getenv("ALLOWED_ORIGINS", "*")
 allowed_origins = [origin.strip() for origin in raw_origins.split(",") if origin.strip()]
 
@@ -68,7 +68,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Middleware de Cabeçalhos de Segurança HTTP (Security Headers)
+# Middleware de CabeÃƒÂ§alhos de SeguranÃƒÂ§a HTTP (Security Headers)
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
     response = await call_next(request)
@@ -79,7 +79,7 @@ async def add_security_headers(request: Request, call_next):
     response.headers["Pragma"] = "no-cache"
     return response
 
-# Handler Global para Padronizar Erros de Validação (Pydantic / FastAPI) no formato {"detail": "..."}
+# Handler Global para Padronizar Erros de ValidaÃƒÂ§ÃƒÂ£o (Pydantic / FastAPI) no formato {"detail": "..."}
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
@@ -89,10 +89,10 @@ async def validation_exception_handler(request, exc: RequestValidationError):
     if errors:
         first_err = errors[0]
         field = first_err.get("loc", [])[-1] if first_err.get("loc") else "campo"
-        msg = first_err.get("msg", "Valor inválido")
-        detail_msg = f"Erro de validação no campo '{field}': {msg}"
+        msg = first_err.get("msg", "Valor invÃƒÂ¡lido")
+        detail_msg = f"Erro de validaÃƒÂ§ÃƒÂ£o no campo '{field}': {msg}"
     else:
-        detail_msg = "Dados de requisição inválidos."
+        detail_msg = "Dados de requisiÃƒÂ§ÃƒÂ£o invÃƒÂ¡lidos."
 
     return JSONResponse(
         status_code=400,
@@ -109,19 +109,20 @@ if os.path.exists(assets_dir):
 if os.path.exists(static_dir):
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
 # Roteadores da API
-from .routers import paciente, auth, admin, health
+from .routers import paciente, auth, admin, health, relatorio_gestao
 app.include_router(health.router)
 app.include_router(paciente.router)
 app.include_router(auth.router)
 app.include_router(admin.router)
+app.include_router(relatorio_gestao.router)
 
 @app.get("/{full_path:path}")
 async def serve_frontend(full_path: str):
     """
-    Serve o arquivo index.html para todas as rotas que não são da API ou arquivos estáticos.
-    Isso é necessário para que o roteamento do Vue (SPA) funcione.
+    Serve o arquivo index.html para todas as rotas que nÃƒÂ£o sÃƒÂ£o da API ou arquivos estÃƒÂ¡ticos.
+    Isso ÃƒÂ© necessÃƒÂ¡rio para que o roteamento do Vue (SPA) funcione.
     """
-    # Se a rota começa com 'api', deixa o roteador do FastAPI lidar
+    # Se a rota comeÃƒÂ§a com 'api', deixa o roteador do FastAPI lidar
     if full_path.startswith("api"):
         raise HTTPException(status_code=404, detail="API route not found")
     
