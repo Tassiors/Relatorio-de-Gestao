@@ -1,4 +1,4 @@
-﻿# src/providers/implementations/relatorio_gestao_sqlite_provider.py
+# src/providers/implementations/relatorio_gestao_sqlite_provider.py
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -103,6 +103,30 @@ class RelatorioGestaoSqliteProvider(RelatorioGestaoProviderInterface):
             {"id": e.id, "ano": e.ano, "descricao": e.descricao, "status": e.status}
             for e in exs
         ]
+
+    async def obter_exercicio_por_id(self, exercicio_id: int) -> Optional[Dict[str, Any]]:
+        stmt = select(Exercicio).options(selectinload(Exercicio.bimestres)).filter(Exercicio.id == exercicio_id)
+        result = await self.session.execute(stmt)
+        ex = result.scalars().first()
+        if not ex:
+            return None
+        return {
+            "id": ex.id,
+            "ano": ex.ano,
+            "descricao": ex.descricao,
+            "status": ex.status,
+            "bimestres": [
+                {
+                    "id": b.id,
+                    "numero": b.numero,
+                    "nome": b.nome,
+                    "status": b.status,
+                    "data_abertura": b.data_abertura.isoformat() if b.data_abertura else None,
+                    "data_fechamento_regular": b.data_fechamento_regular.isoformat() if b.data_fechamento_regular else None
+                }
+                for b in sorted(ex.bimestres, key=lambda x: x.numero)
+            ]
+        }
 
     async def obter_bimestres(self, exercicio_id: int) -> List[Dict[str, Any]]:
         stmt = select(Bimestre).filter(Bimestre.exercicio_id == exercicio_id).order_by(Bimestre.numero)
@@ -612,3 +636,194 @@ class RelatorioGestaoSqliteProvider(RelatorioGestaoProviderInterface):
             await self.session.commit()
             return True
         return False
+
+    async def criar_entrega(
+        self, uorg_id: int, exercicio_id: int, titulo: str, descricao: Optional[str] = None, ordem: int = 1
+    ) -> Dict[str, Any]:
+        entrega = EntregaPlanejada(
+            uorg_id=uorg_id,
+            exercicio_id=exercicio_id,
+            titulo=titulo,
+            descricao=descricao,
+            ordem=ordem,
+            concluida=False,
+            ativo=True
+        )
+        self.session.add(entrega)
+        await self.session.commit()
+        await self.session.refresh(entrega)
+        return {
+            "id": entrega.id,
+            "uorg_id": entrega.uorg_id,
+            "exercicio_id": entrega.exercicio_id,
+            "titulo": entrega.titulo,
+            "descricao": entrega.descricao,
+            "concluida": entrega.concluida,
+            "ordem": entrega.ordem,
+            "ativo": entrega.ativo
+        }
+
+    async def obter_entrega(self, entrega_id: int) -> Optional[Dict[str, Any]]:
+        stmt = select(EntregaPlanejada).filter(EntregaPlanejada.id == entrega_id)
+        result = await self.session.execute(stmt)
+        ent = result.scalars().first()
+        if not ent:
+            return None
+        return {
+            "id": ent.id,
+            "uorg_id": ent.uorg_id,
+            "exercicio_id": ent.exercicio_id,
+            "titulo": ent.titulo,
+            "descricao": ent.descricao,
+            "concluida": ent.concluida,
+            "ordem": ent.ordem,
+            "ativo": ent.ativo
+        }
+
+    async def editar_entrega(
+        self, entrega_id: int, titulo: str, descricao: Optional[str] = None
+    ) -> Dict[str, Any]:
+        stmt = select(EntregaPlanejada).filter(EntregaPlanejada.id == entrega_id)
+        result = await self.session.execute(stmt)
+        ent = result.scalars().first()
+        if not ent:
+            raise ValueError("Entrega planejada não encontrada.")
+        ent.titulo = titulo
+        if descricao is not None:
+            ent.descricao = descricao
+        await self.session.commit()
+        await self.session.refresh(ent)
+        return {
+            "id": ent.id,
+            "uorg_id": ent.uorg_id,
+            "exercicio_id": ent.exercicio_id,
+            "titulo": ent.titulo,
+            "descricao": ent.descricao,
+            "concluida": ent.concluida,
+            "ordem": ent.ordem,
+            "ativo": ent.ativo
+        }
+
+    async def inativar_entrega(self, entrega_id: int) -> bool:
+        stmt = select(EntregaPlanejada).filter(EntregaPlanejada.id == entrega_id)
+        result = await self.session.execute(stmt)
+        ent = result.scalars().first()
+        if not ent:
+            return False
+        ent.ativo = False
+        await self.session.commit()
+        return True
+
+    async def criar_indicador(
+        self, uorg_id: int, exercicio_id: int, nome: str, descricao: Optional[str],
+        periodicidade: str, unidade_medida: str, meta_operador: str,
+        meta_valor: float, meta_valor_max: Optional[float] = None, ordem: int = 1
+    ) -> Dict[str, Any]:
+        ind = Indicador(
+            uorg_id=uorg_id,
+            exercicio_id=exercicio_id,
+            nome=nome,
+            descricao=descricao,
+            periodicidade=periodicidade,
+            unidade_medida=unidade_medida,
+            meta_operador=meta_operador,
+            meta_valor=meta_valor,
+            meta_valor_max=meta_valor_max,
+            ordem=ordem,
+            ativo=True
+        )
+        self.session.add(ind)
+        await self.session.commit()
+        await self.session.refresh(ind)
+        return {
+            "id": ind.id,
+            "uorg_id": ind.uorg_id,
+            "exercicio_id": ind.exercicio_id,
+            "nome": ind.nome,
+            "descricao": ind.descricao,
+            "periodicidade": ind.periodicidade,
+            "unidade_medida": ind.unidade_medida,
+            "meta_operador": ind.meta_operador,
+            "meta_valor": ind.meta_valor,
+            "meta_valor_max": ind.meta_valor_max,
+            "ordem": ind.ordem,
+            "ativo": ind.ativo
+        }
+
+    async def obter_indicador(self, indicador_id: int) -> Optional[Dict[str, Any]]:
+        stmt = select(Indicador).filter(Indicador.id == indicador_id)
+        result = await self.session.execute(stmt)
+        ind = result.scalars().first()
+        if not ind:
+            return None
+        return {
+            "id": ind.id,
+            "uorg_id": ind.uorg_id,
+            "exercicio_id": ind.exercicio_id,
+            "nome": ind.nome,
+            "descricao": ind.descricao,
+            "periodicidade": ind.periodicidade,
+            "unidade_medida": ind.unidade_medida,
+            "meta_operador": ind.meta_operador,
+            "meta_valor": ind.meta_valor,
+            "meta_valor_max": ind.meta_valor_max,
+            "ordem": ind.ordem,
+            "ativo": ind.ativo
+        }
+
+    async def editar_indicador(
+        self, indicador_id: int, dados: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        stmt = select(Indicador).filter(Indicador.id == indicador_id)
+        result = await self.session.execute(stmt)
+        ind = result.scalars().first()
+        if not ind:
+            raise ValueError("Indicador não encontrado.")
+        for campo in ["nome", "descricao", "periodicidade", "unidade_medida", "meta_operador", "meta_valor", "meta_valor_max"]:
+            if campo in dados and dados[campo] is not None:
+                setattr(ind, campo, dados[campo])
+        await self.session.commit()
+        await self.session.refresh(ind)
+        return {
+            "id": ind.id,
+            "uorg_id": ind.uorg_id,
+            "exercicio_id": ind.exercicio_id,
+            "nome": ind.nome,
+            "descricao": ind.descricao,
+            "periodicidade": ind.periodicidade,
+            "unidade_medida": ind.unidade_medida,
+            "meta_operador": ind.meta_operador,
+            "meta_valor": ind.meta_valor,
+            "meta_valor_max": ind.meta_valor_max,
+            "ordem": ind.ordem,
+            "ativo": ind.ativo
+        }
+
+    async def inativar_indicador(self, indicador_id: int) -> bool:
+        stmt = select(Indicador).filter(Indicador.id == indicador_id)
+        result = await self.session.execute(stmt)
+        ind = result.scalars().first()
+        if not ind:
+            return False
+        ind.ativo = False
+        await self.session.commit()
+        return True
+
+    async def atualizar_status_exercicio(
+        self, exercicio_id: int, status: str
+    ) -> Dict[str, Any]:
+        stmt = select(Exercicio).filter(Exercicio.id == exercicio_id)
+        result = await self.session.execute(stmt)
+        ex = result.scalars().first()
+        if not ex:
+            raise ValueError("Exercício não encontrado.")
+        ex.status = status
+        await self.session.commit()
+        await self.session.refresh(ex)
+        return {
+            "id": ex.id,
+            "ano": ex.ano,
+            "descricao": ex.descricao,
+            "status": ex.status
+        }
+

@@ -1,4 +1,4 @@
-﻿# src/controllers/relatorio_gestao_controller.py
+# src/controllers/relatorio_gestao_controller.py
 from typing import List, Dict, Any, Optional
 from fastapi import HTTPException
 from ..providers.interfaces.relatorio_gestao_provider_interface import RelatorioGestaoProviderInterface
@@ -258,3 +258,264 @@ async def marcar_notificacao_lida(
 ) -> Dict[str, Any]:
     ok = await provider.marcar_notificacao_lida(notificacao_id)
     return {"sucesso": ok}
+
+
+# ---------------------------------------------------------
+# Planejamento Anual: Regras de Negócio e Validações RBAC
+# ---------------------------------------------------------
+
+def validar_escopo_uorg(usuario_logado: Dict[str, Any], uorg_id: int, apenas_leitura: bool = False):
+    """
+    Valida se o usuário autenticado tem permissão para acessar ou modificar a UORG.
+    - ADMINISTRADOR: tem acesso a todas as UORGs.
+    - SUPERINTENDENTE / GERENTE: tem permissão de leitura para todas as UORGs, mas não de mutação.
+    - CHEFE / CHEFE_UORG: apenas sua própria UORG.
+    """
+    perfil = usuario_logado.get("perfil", "")
+    if perfil == "ADMINISTRADOR":
+        return
+
+    user_uorg_id = usuario_logado.get("uorg_id")
+    if perfil in ["CHEFE", "CHEFE_UORG"]:
+        if user_uorg_id is None or int(user_uorg_id) != int(uorg_id):
+            raise HTTPException(
+                status_code=403,
+                detail="Acesso não autorizado para esta Unidade Organizacional (UORG)."
+            )
+        return
+
+    if apenas_leitura and perfil in ["SUPERINTENDENTE", "GERENTE"]:
+        return
+
+    raise HTTPException(
+        status_code=403,
+        detail="Perfil não autorizado para esta operação de planejamento."
+    )
+
+
+async def verificar_planejamento_aberto(
+    exercicio_id: int,
+    usuario_logado: Dict[str, Any],
+    provider: RelatorioGestaoProviderInterface
+) -> Dict[str, Any]:
+    """
+    Verifica se o exercício está com o status 'PLANEJAMENTO'.
+    Usuários com perfil de Chefia só podem modificar entregas/indicadores com planejamento aberto.
+    ADMINISTRADOR tem permissão para intervenção administrativa.
+    """
+    ex = await provider.obter_exercicio_por_id(exercicio_id)
+    if not ex:
+        raise HTTPException(status_code=404, detail="Exercício não encontrado.")
+
+    perfil = usuario_logado.get("perfil", "")
+    if perfil != "ADMINISTRADOR" and ex.get("status") != "PLANEJAMENTO":
+        raise HTTPException(
+            status_code=400,
+            detail="A janela de planejamento anual está encerrada para este exercício."
+        )
+    return ex
+
+
+async def obter_planejamento_uorg(
+    uorg_id: int,
+    exercicio_id: Optional[int],
+    usuario_logado: Dict[str, Any],
+    provider: RelatorioGestaoProviderInterface
+) -> Dict[str, Any]:
+    """
+    Consulta o planejamento de entregas e indicadores da UORG para o exercício corrente.
+    """
+    validar_escopo_uorg(usuario_logado, uorg_id, apenas_leitura=True)
+
+    if not exercicio_id:
+        ex = await provider.obter_exercicio_ativo()
+        if not ex:
+            raise HTTPException(status_code=404, detail="Nenhum exercício ativo encontrado.")
+        exercicio_id = ex["id"]
+    else:
+        ex = await provider.obter_exercicio_por_id(exercicio_id)
+        if not ex:
+            raise HTTPException(status_code=404, detail="Exercício não encontrado.")
+
+    uorg = await provider.obter_uorg_por_id(uorg_id)
+    if not uorg:
+        raise HTTPException(status_code=404, detail="UORG não encontrada.")
+
+    entregas = await provider.listar_entregas_uorg(exercicio_id, uorg_id)
+    indicadores = await provider.listar_indicadores_uorg(exercicio_id, uorg_id)
+
+    return {
+        "exercicio": ex,
+        "uorg": uorg,
+        "planejamento_aberto": ex.get("status") == "PLANEJAMENTO",
+        "entregas": entregas,
+        "indicadores": indicadores,
+        "total_entregas": len(entregas),
+        "total_indicadores": len(indicadores)
+    }
+
+
+async def criar_entrega_planejada(
+    dados: Dict[str, Any],
+    usuario_logado: Dict[str, Any],
+    provider: RelatorioGestaoProviderInterface
+) -> Dict[str, Any]:
+    uorg_id = dados["uorg_id"]
+    exercicio_id = dados["exercicio_id"]
+
+    validar_escopo_uorg(usuario_logado, uorg_id, apenas_leitura=False)
+    await verificar_planejamento_aberto(exercicio_id, usuario_logado, provider)
+
+    return await provider.criar_entrega(
+        uorg_id=uorg_id,
+        exercicio_id=exercicio_id,
+        titulo=dados["titulo"].strip(),
+        descricao=dados.get("descricao"),
+        ordem=dados.get("ordem", 1)
+    )
+
+
+async def editar_entrega_planejada(
+    entrega_id: int,
+    dados: Dict[str, Any],
+    usuario_logado: Dict[str, Any],
+    provider: RelatorioGestaoProviderInterface
+) -> Dict[str, Any]:
+    entrega_antiga = await provider.obter_entrega(entrega_id)
+    if not entrega_antiga:
+        raise HTTPException(status_code=404, detail="Entrega planejada não encontrada.")
+
+    validar_escopo_uorg(usuario_logado, entrega_antiga["uorg_id"], apenas_leitura=False)
+    await verificar_planejamento_aberto(entrega_antiga["exercicio_id"], usuario_logado, provider)
+
+    entrega_atualizada = await provider.editar_entrega(
+        entrega_id=entrega_id,
+        titulo=dados["titulo"].strip(),
+        descricao=dados.get("descricao")
+    )
+    return {
+        "entrega": entrega_atualizada,
+        "dados_anteriores": entrega_antiga,
+        "dados_novos": entrega_atualizada
+    }
+
+
+async def inativar_entrega_planejada(
+    entrega_id: int,
+    usuario_logado: Dict[str, Any],
+    provider: RelatorioGestaoProviderInterface
+) -> Dict[str, Any]:
+    entrega_antiga = await provider.obter_entrega(entrega_id)
+    if not entrega_antiga:
+        raise HTTPException(status_code=404, detail="Entrega planejada não encontrada.")
+
+    validar_escopo_uorg(usuario_logado, entrega_antiga["uorg_id"], apenas_leitura=False)
+    await verificar_planejamento_aberto(entrega_antiga["exercicio_id"], usuario_logado, provider)
+
+    sucesso = await provider.inativar_entrega(entrega_id)
+    return {
+        "sucesso": sucesso,
+        "dados_anteriores": entrega_antiga,
+        "dados_novos": {"ativo": False}
+    }
+
+
+async def criar_indicador_planejado(
+    dados: Dict[str, Any],
+    usuario_logado: Dict[str, Any],
+    provider: RelatorioGestaoProviderInterface
+) -> Dict[str, Any]:
+    uorg_id = dados["uorg_id"]
+    exercicio_id = dados["exercicio_id"]
+
+    validar_escopo_uorg(usuario_logado, uorg_id, apenas_leitura=False)
+    await verificar_planejamento_aberto(exercicio_id, usuario_logado, provider)
+
+    # Validar limite de 1 a 3 indicadores ativos por UORG (RF-IND-01)
+    inds_existentes = await provider.listar_indicadores_uorg(exercicio_id, uorg_id)
+    if len(inds_existentes) >= 3:
+        raise HTTPException(
+            status_code=400,
+            detail="Limite máximo de 3 indicadores ativos por UORG já foi atingido."
+        )
+
+    novo_ind = await provider.criar_indicador(
+        uorg_id=uorg_id,
+        exercicio_id=exercicio_id,
+        nome=dados["nome"].strip(),
+        descricao=dados.get("descricao"),
+        periodicidade=dados.get("periodicidade", "BIMESTRAL"),
+        unidade_medida=dados["unidade_medida"].strip(),
+        meta_operador=dados.get("meta_operador", "MAIOR_IGUAL"),
+        meta_valor=dados["meta_valor"],
+        meta_valor_max=dados.get("meta_valor_max"),
+        ordem=dados.get("ordem", len(inds_existentes) + 1)
+    )
+    return novo_ind
+
+
+async def editar_indicador_planejado(
+    indicador_id: int,
+    dados: Dict[str, Any],
+    usuario_logado: Dict[str, Any],
+    provider: RelatorioGestaoProviderInterface
+) -> Dict[str, Any]:
+    ind_antigo = await provider.obter_indicador(indicador_id)
+    if not ind_antigo:
+        raise HTTPException(status_code=404, detail="Indicador não encontrado.")
+
+    validar_escopo_uorg(usuario_logado, ind_antigo["uorg_id"], apenas_leitura=False)
+    await verificar_planejamento_aberto(ind_antigo["exercicio_id"], usuario_logado, provider)
+
+    ind_atualizado = await provider.editar_indicador(indicador_id, dados)
+    return {
+        "indicador": ind_atualizado,
+        "dados_anteriores": ind_antigo,
+        "dados_novos": ind_atualizado
+    }
+
+
+async def inativar_indicador_planejado(
+    indicador_id: int,
+    usuario_logado: Dict[str, Any],
+    provider: RelatorioGestaoProviderInterface
+) -> Dict[str, Any]:
+    ind_antigo = await provider.obter_indicador(indicador_id)
+    if not ind_antigo:
+        raise HTTPException(status_code=404, detail="Indicador não encontrado.")
+
+    validar_escopo_uorg(usuario_logado, ind_antigo["uorg_id"], apenas_leitura=False)
+    await verificar_planejamento_aberto(ind_antigo["exercicio_id"], usuario_logado, provider)
+
+    sucesso = await provider.inativar_indicador(indicador_id)
+    return {
+        "sucesso": sucesso,
+        "dados_anteriores": ind_antigo,
+        "dados_novos": {"ativo": False}
+    }
+
+
+async def alterar_status_exercicio(
+    exercicio_id: int,
+    novo_status: str,
+    usuario_logado: Dict[str, Any],
+    provider: RelatorioGestaoProviderInterface
+) -> Dict[str, Any]:
+    perfil = usuario_logado.get("perfil", "")
+    if perfil != "ADMINISTRADOR":
+        raise HTTPException(
+            status_code=403,
+            detail="Apenas o Administrador pode alterar o status do exercício."
+        )
+
+    ex_antigo = await provider.obter_exercicio_por_id(exercicio_id)
+    if not ex_antigo:
+        raise HTTPException(status_code=404, detail="Exercício não encontrado.")
+
+    ex_atualizado = await provider.atualizar_status_exercicio(exercicio_id, novo_status)
+    return {
+        "exercicio": ex_atualizado,
+        "dados_anteriores": {"status": ex_antigo["status"]},
+        "dados_novos": {"status": novo_status}
+    }
+

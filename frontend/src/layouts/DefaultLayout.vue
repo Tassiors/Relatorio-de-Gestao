@@ -56,6 +56,16 @@
           </router-link>
 
           <router-link 
+            to="/planejamento" 
+            :title="isCollapsed ? 'Planejamento Anual' : ''"
+            :class="[isCollapsed ? 'justify-center px-2' : 'px-4']"
+            class="flex items-center space-x-3 py-2.5 rounded transition duration-200 hover:bg-paper-active-link hover:text-white"
+          >
+            <ClipboardDocumentListIcon class="h-5 w-5 shrink-0" />
+            <span v-if="!isCollapsed" class="truncate text-sm font-medium">Planejamento Anual</span>
+          </router-link>
+
+          <router-link 
             to="/preenchimento"
             :title="isCollapsed ? 'Preenchimento Bimestral' : ''"
             :class="[isCollapsed ? 'justify-center px-2' : 'px-4']"
@@ -194,6 +204,7 @@ import { useRoute } from 'vue-router';
 import {
   HomeIcon,
   TableCellsIcon,
+  ClipboardDocumentListIcon,
   PencilSquareIcon,
   DocumentChartBarIcon,
   CalendarDaysIcon,

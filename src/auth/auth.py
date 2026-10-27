@@ -38,22 +38,65 @@ class MockAuthProvider(AuthProviderInterface):
     """Provedor de autenticação mock para desenvolvimento offline."""
     def authenticate_user(self, username, password) -> dict:
         print("--- Using Mock Authentication ---")
-        if username == "admin" and password == "admin":
-            print(f"Authentication successful for mock user: {username}")
-            # O nome do grupo que o frontend usa para identificar administradores
-            admin_group = "GLO-SEC-HCPE-SETISD"
-            return {
-                "username": "admin",
-                "displayName": ["Mock Admin"],
-                "groups": [admin_group, "Users"],
-                "email": "admin@mock.com"
-            }
-        else:
+        clean_user = username.strip().lower() if username else ""
+
+        mock_credentials = {
+            "admin": ["admin"],
+            "gestor.unidade": ["gestor123", "gestor", "senha123"],
+            "gestor": ["gestor123", "gestor", "senha123"],
+            "superintendente": ["super123", "senha123"],
+            "gerente.gad": ["gerente123", "senha123"],
+            "gerente.gas": ["gerente123", "senha123"],
+            "gerente.gep": ["gerente123", "senha123"],
+            "chefe.setisd": ["chefe123", "senha123"],
+            "chefe.stgq": ["chefe123", "senha123"],
+        }
+
+        # Valida credenciais (password pode ser None em refresh token)
+        is_valid = clean_user in mock_credentials and (
+            password is None or password in mock_credentials[clean_user]
+        )
+
+        if not is_valid:
             print(f"Authentication failed for mock user: {username}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, 
                 detail="Invalid mock credentials"
             )
+
+        print(f"Authentication successful for mock user: {clean_user}")
+
+        if clean_user == "admin":
+            # O nome do grupo que o frontend usa para identificar administradores
+            admin_group = "GLO-SEC-HCPE-SETISD"
+            return {
+                "username": "admin",
+                "displayName": ["Mock Admin"],
+                "givenName": ["Administrador"],
+                "userPrincipalName": ["admin@ebserh.gov.br"],
+                "groups": [admin_group, "Users"],
+                "email": "admin@mock.com",
+                "title": ["Administrador do Sistema"],
+                "department": ["SETISD / HC-UFPE"],
+                "employeeNumber": ["1001"]
+            }
+
+        user_info = self.search_user(clean_user)
+        display_name = user_info.get("displayName") or clean_user.capitalize()
+        email = user_info.get("email") or f"{clean_user}@ebserh.gov.br"
+        department = user_info.get("department") or "HC-UFPE / EBSERH"
+
+        return {
+            "username": clean_user,
+            "displayName": [display_name],
+            "givenName": [display_name.split()[0] if display_name else clean_user],
+            "userPrincipalName": [email],
+            "groups": ["Users", "GESTOR_UNIDADE" if "gestor" in clean_user else "Users"],
+            "email": email,
+            "title": ["Gestor da Unidade" if "gestor" in clean_user else "Colaborador"],
+            "department": [department],
+            "employeeNumber": ["2001"]
+        }
 
     def search_user(self, username: str) -> dict:
         """Busca simulada de usuário no AD para desenvolvimento/teste."""
@@ -85,6 +128,13 @@ class MockAuthProvider(AuthProviderInterface):
                 "username": "gestor.unidade",
                 "displayName": "Gestor da Unidade",
                 "email": "gestor.unidade@ebserh.gov.br",
+                "department": "Diretoria de Enfermagem / HC-UFPE"
+            },
+            "gestor": {
+                "exists": True,
+                "username": "gestor",
+                "displayName": "Gestor da Unidade",
+                "email": "gestor@ebserh.gov.br",
                 "department": "Diretoria de Enfermagem / HC-UFPE"
             },
             "medico.exemplo": {

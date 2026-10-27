@@ -1,4 +1,4 @@
-﻿# src/routers/relatorio_gestao.py
+# src/routers/relatorio_gestao.py
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from typing import List, Dict, Any, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,7 +11,12 @@ from ..schemas.relatorio_gestao import (
     SalvarRascunhoSchema,
     EnviarRelatorioSchema,
     RegistrarFeedbackSchema,
-    PrazoExcepcionalSchema
+    PrazoExcepcionalSchema,
+    CriarEntregaSchema,
+    EditarEntregaSchema,
+    CriarIndicadorSchema,
+    EditarIndicadorSchema,
+    AlterarStatusExercicioSchema
 )
 from ..helpers.audit_helper import registrar_auditoria
 from ..helpers.export_helper import gerar_excel_relatorio, gerar_excel_matriz, gerar_pdf_relatorio
@@ -280,3 +285,282 @@ async def exportar_matriz_excel(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
+
+
+# ---------------------------------------------------------
+# Endpoints de Planejamento Anual (Entregas e Indicadores)
+# ---------------------------------------------------------
+
+@router.get("/planejamento/uorg/{uorg_id}", response_model=Dict[str, Any])
+async def obter_planejamento_uorg(
+    uorg_id: int,
+    exercicio_id: Optional[int] = None,
+    usuario: Dict[str, Any] = Depends(get_current_user_profile),
+    provider: RelatorioGestaoProviderInterface = Depends(get_relatorio_gestao_provider)
+):
+    """Consulta o planejamento anual de entregas e indicadores da UORG."""
+    return await controller.obter_planejamento_uorg(
+        uorg_id=uorg_id,
+        exercicio_id=exercicio_id,
+        usuario_logado=usuario,
+        provider=provider
+    )
+
+
+@router.post("/planejamento/entregas", response_model=Dict[str, Any])
+async def criar_entrega_planejada(
+    payload: CriarEntregaSchema,
+    request: Request,
+    usuario: Dict[str, Any] = Depends(get_current_user_profile),
+    provider: RelatorioGestaoProviderInterface = Depends(get_relatorio_gestao_provider),
+    db: AsyncSession = Depends(get_app_db_session)
+):
+    """Cadastra nova entrega planejada para a UORG no exercício."""
+    nova_entrega = await controller.criar_entrega_planejada(
+        dados=payload.model_dump(),
+        usuario_logado=usuario,
+        provider=provider
+    )
+
+    await registrar_auditoria(
+        db=db,
+        usuario=usuario["username"],
+        categoria="CONFIGURACAO",
+        acao="CRIAR_ENTREGA_PLANEJADA",
+        recurso=f"entrega:{nova_entrega['id']}",
+        dados_novos=nova_entrega,
+        ip_origem=request.client.host if request.client else "127.0.0.1"
+    )
+    return nova_entrega
+
+
+@router.put("/planejamento/entregas/{entrega_id}", response_model=Dict[str, Any])
+async def editar_entrega_planejada(
+    entrega_id: int,
+    payload: EditarEntregaSchema,
+    request: Request,
+    usuario: Dict[str, Any] = Depends(get_current_user_profile),
+    provider: RelatorioGestaoProviderInterface = Depends(get_relatorio_gestao_provider),
+    db: AsyncSession = Depends(get_app_db_session)
+):
+    """Edita dados da entrega planejada existente."""
+    res = await controller.editar_entrega_planejada(
+        entrega_id=entrega_id,
+        dados=payload.model_dump(),
+        usuario_logado=usuario,
+        provider=provider
+    )
+
+    await registrar_auditoria(
+        db=db,
+        usuario=usuario["username"],
+        categoria="CONFIGURACAO",
+        acao="EDITAR_ENTREGA_PLANEJADA",
+        recurso=f"entrega:{entrega_id}",
+        dados_anteriores=res["dados_anteriores"],
+        dados_novos=res["dados_novos"],
+        ip_origem=request.client.host if request.client else "127.0.0.1"
+    )
+    return res["entrega"]
+
+
+@router.delete("/planejamento/entregas/{entrega_id}", response_model=Dict[str, Any])
+async def inativar_entrega_planejada(
+    entrega_id: int,
+    request: Request,
+    usuario: Dict[str, Any] = Depends(get_current_user_profile),
+    provider: RelatorioGestaoProviderInterface = Depends(get_relatorio_gestao_provider),
+    db: AsyncSession = Depends(get_app_db_session)
+):
+    """Inativa a entrega planejada (soft delete)."""
+    res = await controller.inativar_entrega_planejada(
+        entrega_id=entrega_id,
+        usuario_logado=usuario,
+        provider=provider
+    )
+
+    await registrar_auditoria(
+        db=db,
+        usuario=usuario["username"],
+        categoria="CONFIGURACAO",
+        acao="INATIVAR_ENTREGA_PLANEJADA",
+        recurso=f"entrega:{entrega_id}",
+        dados_anteriores=res["dados_anteriores"],
+        dados_novos=res["dados_novos"],
+        ip_origem=request.client.host if request.client else "127.0.0.1"
+    )
+    return {"sucesso": res["sucesso"]}
+
+
+@router.post("/planejamento/indicadores", response_model=Dict[str, Any])
+async def criar_indicador_planejado(
+    payload: CriarIndicadorSchema,
+    request: Request,
+    usuario: Dict[str, Any] = Depends(get_current_user_profile),
+    provider: RelatorioGestaoProviderInterface = Depends(get_relatorio_gestao_provider),
+    db: AsyncSession = Depends(get_app_db_session)
+):
+    """Cadastra indicador anual da UORG com validação de limites (máx. 3)."""
+    novo_ind = await controller.criar_indicador_planejado(
+        dados=payload.model_dump(),
+        usuario_logado=usuario,
+        provider=provider
+    )
+
+    await registrar_auditoria(
+        db=db,
+        usuario=usuario["username"],
+        categoria="CONFIGURACAO",
+        acao="CRIAR_INDICADOR_PLANEJADO",
+        recurso=f"indicador:{novo_ind['id']}",
+        dados_novos=novo_ind,
+        ip_origem=request.client.host if request.client else "127.0.0.1"
+    )
+    return novo_ind
+
+
+@router.put("/planejamento/indicadores/{indicador_id}", response_model=Dict[str, Any])
+async def editar_indicador_planejado(
+    indicador_id: int,
+    payload: EditarIndicadorSchema,
+    request: Request,
+    usuario: Dict[str, Any] = Depends(get_current_user_profile),
+    provider: RelatorioGestaoProviderInterface = Depends(get_relatorio_gestao_provider),
+    db: AsyncSession = Depends(get_app_db_session)
+):
+    """Edita parâmetros do indicador anual existente."""
+    res = await controller.editar_indicador_planejado(
+        indicador_id=indicador_id,
+        dados=payload.model_dump(),
+        usuario_logado=usuario,
+        provider=provider
+    )
+
+    await registrar_auditoria(
+        db=db,
+        usuario=usuario["username"],
+        categoria="CONFIGURACAO",
+        acao="EDITAR_INDICADOR_PLANEJADO",
+        recurso=f"indicador:{indicador_id}",
+        dados_anteriores=res["dados_anteriores"],
+        dados_novos=res["dados_novos"],
+        ip_origem=request.client.host if request.client else "127.0.0.1"
+    )
+    return res["indicador"]
+
+
+@router.delete("/planejamento/indicadores/{indicador_id}", response_model=Dict[str, Any])
+async def inativar_indicador_planejado(
+    indicador_id: int,
+    request: Request,
+    usuario: Dict[str, Any] = Depends(get_current_user_profile),
+    provider: RelatorioGestaoProviderInterface = Depends(get_relatorio_gestao_provider),
+    db: AsyncSession = Depends(get_app_db_session)
+):
+    """Inativa o indicador anual da UORG (soft delete)."""
+    res = await controller.inativar_indicador_planejado(
+        indicador_id=indicador_id,
+        usuario_logado=usuario,
+        provider=provider
+    )
+
+    await registrar_auditoria(
+        db=db,
+        usuario=usuario["username"],
+        categoria="CONFIGURACAO",
+        acao="INATIVAR_INDICADOR_PLANEJADO",
+        recurso=f"indicador:{indicador_id}",
+        dados_anteriores=res["dados_anteriores"],
+        dados_novos=res["dados_novos"],
+        ip_origem=request.client.host if request.client else "127.0.0.1"
+    )
+    return {"sucesso": res["sucesso"]}
+
+
+@router.post("/planejamento/exercicio/{exercicio_id}/abrir-planejamento", response_model=Dict[str, Any])
+async def abrir_planejamento_exercicio(
+    exercicio_id: int,
+    request: Request,
+    usuario: Dict[str, Any] = Depends(get_current_user_profile),
+    provider: RelatorioGestaoProviderInterface = Depends(get_relatorio_gestao_provider),
+    db: AsyncSession = Depends(get_app_db_session)
+):
+    """Abre a janela de planejamento anual do exercício (exclusivo Administrador)."""
+    res = await controller.alterar_status_exercicio(
+        exercicio_id=exercicio_id,
+        novo_status="PLANEJAMENTO",
+        usuario_logado=usuario,
+        provider=provider
+    )
+
+    await registrar_auditoria(
+        db=db,
+        usuario=usuario["username"],
+        categoria="CONFIGURACAO",
+        acao="ABRIR_PLANEJAMENTO_EXERCICIO",
+        recurso=f"exercicio:{exercicio_id}",
+        dados_anteriores=res["dados_anteriores"],
+        dados_novos=res["dados_novos"],
+        ip_origem=request.client.host if request.client else "127.0.0.1"
+    )
+    return res["exercicio"]
+
+
+@router.post("/planejamento/exercicio/{exercicio_id}/fechar-planejamento", response_model=Dict[str, Any])
+async def fechar_planejamento_exercicio(
+    exercicio_id: int,
+    request: Request,
+    usuario: Dict[str, Any] = Depends(get_current_user_profile),
+    provider: RelatorioGestaoProviderInterface = Depends(get_relatorio_gestao_provider),
+    db: AsyncSession = Depends(get_app_db_session)
+):
+    """Encerra a janela de planejamento anual do exercício (exclusivo Administrador)."""
+    res = await controller.alterar_status_exercicio(
+        exercicio_id=exercicio_id,
+        novo_status="EM_ANDAMENTO",
+        usuario_logado=usuario,
+        provider=provider
+    )
+
+    await registrar_auditoria(
+        db=db,
+        usuario=usuario["username"],
+        categoria="CONFIGURACAO",
+        acao="FECHAR_PLANEJAMENTO_EXERCICIO",
+        recurso=f"exercicio:{exercicio_id}",
+        dados_anteriores=res["dados_anteriores"],
+        dados_novos=res["dados_novos"],
+        ip_origem=request.client.host if request.client else "127.0.0.1"
+    )
+    return res["exercicio"]
+
+
+@router.post("/planejamento/exercicio/{exercicio_id}/status", response_model=Dict[str, Any])
+async def alterar_status_exercicio(
+    exercicio_id: int,
+    payload: AlterarStatusExercicioSchema,
+    request: Request,
+    usuario: Dict[str, Any] = Depends(get_current_user_profile),
+    provider: RelatorioGestaoProviderInterface = Depends(get_relatorio_gestao_provider),
+    db: AsyncSession = Depends(get_app_db_session)
+):
+    """Altera o status geral do exercício (exclusivo Administrador)."""
+    res = await controller.alterar_status_exercicio(
+        exercicio_id=exercicio_id,
+        novo_status=payload.status,
+        usuario_logado=usuario,
+        provider=provider
+    )
+
+    await registrar_auditoria(
+        db=db,
+        usuario=usuario["username"],
+        categoria="CONFIGURACAO",
+        acao="ALTERAR_STATUS_EXERCICIO",
+        recurso=f"exercicio:{exercicio_id}",
+        dados_anteriores=res["dados_anteriores"],
+        dados_novos=res["dados_novos"],
+        ip_origem=request.client.host if request.client else "127.0.0.1"
+    )
+    return res["exercicio"]
+

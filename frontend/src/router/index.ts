@@ -6,6 +6,7 @@ import Configuracoes from '../views/Configuracoes.vue';
 import Exemplos from '../views/Exemplos.vue';
 import MatrizAcompanhamento from '../views/MatrizAcompanhamento.vue';
 import PreenchimentoBimestral from '../views/PreenchimentoBimestral.vue';
+import PlanejamentoAnual from '../views/PlanejamentoAnual.vue';
 import ConsolidadoGestao from '../views/ConsolidadoGestao.vue';
 import GestaoExercicio from '../views/GestaoExercicio.vue';
 
@@ -25,6 +26,12 @@ const routes = [
     path: '/matriz',
     name: 'Matriz de Acompanhamento',
     component: MatrizAcompanhamento,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/planejamento',
+    name: 'Planejamento Anual',
+    component: PlanejamentoAnual,
     meta: { requiresAuth: true },
   },
   {

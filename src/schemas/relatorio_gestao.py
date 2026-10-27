@@ -1,4 +1,4 @@
-﻿# src/schemas/relatorio_gestao.py
+# src/schemas/relatorio_gestao.py
 from pydantic import BaseModel, Field
 from typing import List, Optional
 
@@ -47,3 +47,39 @@ class PrazoExcepcionalSchema(BaseModel):
     uorg_id: int
     motivo: str = Field(..., min_length=10)
     data_fim: str = Field(...)
+
+class CriarEntregaSchema(BaseModel):
+    uorg_id: int
+    exercicio_id: int
+    titulo: str = Field(..., min_length=3)
+    descricao: Optional[str] = None
+    ordem: Optional[int] = 1
+
+class EditarEntregaSchema(BaseModel):
+    titulo: str = Field(..., min_length=3)
+    descricao: Optional[str] = None
+
+class CriarIndicadorSchema(BaseModel):
+    uorg_id: int
+    exercicio_id: int
+    nome: str = Field(..., min_length=3)
+    descricao: Optional[str] = None
+    periodicidade: str = Field("BIMESTRAL", pattern="^(MENSAL|BIMESTRAL|TRIMESTRAL|QUADRIMESTRAL|SEMESTRAL)$")
+    unidade_medida: str = Field(..., min_length=1)
+    meta_operador: str = Field("MAIOR_IGUAL", pattern="^(MAIOR_IGUAL|MENOR_IGUAL|IGUAL|ENTRE)$")
+    meta_valor: float
+    meta_valor_max: Optional[float] = None
+    ordem: Optional[int] = 1
+
+class EditarIndicadorSchema(BaseModel):
+    nome: str = Field(..., min_length=3)
+    descricao: Optional[str] = None
+    periodicidade: str = Field("BIMESTRAL", pattern="^(MENSAL|BIMESTRAL|TRIMESTRAL|QUADRIMESTRAL|SEMESTRAL)$")
+    unidade_medida: str = Field(..., min_length=1)
+    meta_operador: str = Field("MAIOR_IGUAL", pattern="^(MAIOR_IGUAL|MENOR_IGUAL|IGUAL|ENTRE)$")
+    meta_valor: float
+    meta_valor_max: Optional[float] = None
+
+class AlterarStatusExercicioSchema(BaseModel):
+    status: str = Field(..., pattern="^(PLANEJAMENTO|EM_ANDAMENTO|ENCERRADO)$")
+
