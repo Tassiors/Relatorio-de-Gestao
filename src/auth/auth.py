@@ -41,20 +41,29 @@ class MockAuthProvider(AuthProviderInterface):
         clean_user = username.strip().lower() if username else ""
 
         mock_credentials = {
-            "admin": ["admin"],
-            "gestor.unidade": ["gestor123", "gestor", "senha123"],
-            "gestor": ["gestor123", "gestor", "senha123"],
-            "superintendente": ["super123", "senha123"],
-            "gerente.gad": ["gerente123", "senha123"],
-            "gerente.gas": ["gerente123", "senha123"],
-            "gerente.gep": ["gerente123", "senha123"],
-            "chefe.setisd": ["chefe123", "senha123"],
-            "chefe.stgq": ["chefe123", "senha123"],
+            "admin": ["admin", "123", "senha123"],
+            "gestor.unidade": ["123", "gestor123", "gestor", "senha123"],
+            "gestor": ["123", "gestor123", "gestor", "senha123"],
+            "superintendente": ["123", "super123", "senha123"],
+            "gerente.gad": ["123", "gerente123", "senha123"],
+            "gerente.gas": ["123", "gerente123", "senha123"],
+            "gerente.gep": ["123", "gerente123", "senha123"],
+            "chefe.setisd": ["123", "chefe123", "senha123"],
+            "chefe.stgq": ["123", "chefe123", "senha123"],
         }
 
+        senhas_padrao_mock = ["123", "chefe123", "gerente123", "super123", "senha123"]
+        is_chefe_ou_gerente_uorg = clean_user.startswith("chefe.") or clean_user.startswith("gerente.")
+
         # Valida credenciais (password pode ser None em refresh token)
-        is_valid = clean_user in mock_credentials and (
-            password is None or password in mock_credentials[clean_user]
+        is_valid = (
+            clean_user in mock_credentials and (
+                password is None or password in mock_credentials[clean_user]
+            )
+        ) or (
+            is_chefe_ou_gerente_uorg and (
+                password is None or password in senhas_padrao_mock
+            )
         )
 
         if not is_valid:

@@ -16,7 +16,8 @@ from ..schemas.relatorio_gestao import (
     EditarEntregaSchema,
     CriarIndicadorSchema,
     EditarIndicadorSchema,
-    AlterarStatusExercicioSchema
+    AlterarStatusExercicioSchema,
+    AtualizarBimestreSchema
 )
 from ..helpers.audit_helper import registrar_auditoria
 from ..helpers.export_helper import gerar_excel_relatorio, gerar_excel_matriz, gerar_pdf_relatorio
@@ -53,6 +54,7 @@ async def obter_exercicio_ativo(
 @router.get("/matriz", response_model=Dict[str, Any])
 async def obter_matriz_acompanhamento(
     exercicio_id: Optional[int] = None,
+    usuario: Dict[str, Any] = Depends(get_current_user_profile),
     provider: RelatorioGestaoProviderInterface = Depends(get_relatorio_gestao_provider)
 ):
     """Retorna a Matriz UORG x Bimestre para o dashboard executivo e operacional."""
@@ -61,7 +63,7 @@ async def obter_matriz_acompanhamento(
         if not ex:
             raise HTTPException(status_code=404, detail="Nenhum exercício ativo encontrado.")
         exercicio_id = ex["id"]
-    return await controller.obter_matriz(exercicio_id, provider)
+    return await controller.obter_matriz(exercicio_id, provider, usuario_logado=usuario)
 
 @router.get("/relatorios", response_model=Dict[str, Any])
 async def obter_relatorio(
@@ -88,7 +90,8 @@ async def salvar_rascunho_relatorio(
         uorg_id=payload.uorg_id,
         dados=payload.model_dump(),
         usuario=usuario["username"],
-        provider=provider
+        provider=provider,
+        usuario_logado=usuario
     )
 
     # Auditoria de salvamento
@@ -117,7 +120,8 @@ async def enviar_relatorio_bimestral(
         relatorio_id=payload.relatorio_id,
         dados_finais=payload.model_dump(),
         usuario=usuario["username"],
-        provider=provider
+        provider=provider,
+        usuario_logado=usuario
     )
 
     # Auditoria de envio
@@ -563,4 +567,76 @@ async def alterar_status_exercicio(
         ip_origem=request.client.host if request.client else "127.0.0.1"
     )
     return res["exercicio"]
+
+
+@router.put("/bimestres/{bimestre_id}", response_model=Dict[str, Any])
+async def atualizar_bimestre(
+    bimestre_id: int,
+    payload: AtualizarBimestreSchema,
+    request: Request,
+    usuario: Dict[str, Any] = Depends(get_current_user_profile),
+    provider: RelatorioGestaoProviderInterface = Depends(get_relatorio_gestao_provider),
+    db: AsyncSession = Depends(get_app_db_session)
+):
+    """Altera manualmente o status (ABERTO/FECHADO) e/ou a data de fechamento regular de um bimestre (exclusivo Administrador)."""
+    bim = await controller.atualizar_bimestre(
+        bimestre_id=bimestre_id,
+        status=payload.status,
+        data_fechamento_regular=payload.data_fechamento_regular,
+        usuario_logado=usuario,
+        provider=provider
+    )
+
+    await registrar_auditoria(
+        db=db,
+        usuario=usuario["username"],
+        categoria="CONFIGURACAO",
+        acao="ATUALIZAR_BIMESTRE",
+        recurso=f"bimestre:{bimestre_id}",
+        dados_novos={"status": bim.get("status"), "data_fechamento_regular": bim.get("data_fechamento_regular")},
+        ip_origem=request.client.host if request.client else "127.0.0.1"
+    )
+    return bim
+
+
+# ---------------------------------------------------------
+# Endpoints do Dashboard (Hierarquia de UORGs e Métricas)
+# ---------------------------------------------------------
+
+router_alias = APIRouter(
+    prefix="/api/relatorios-gestao",
+    tags=["Portal Relatório de Gestão - Dashboard"],
+    dependencies=[Depends(auth_handler.decode_token)]
+)
+
+
+@router.get("/uorgs", response_model=List[Dict[str, Any]])
+@router_alias.get("/uorgs", response_model=List[Dict[str, Any]])
+@router.get("/dashboard/uorgs-acessiveis", response_model=List[Dict[str, Any]])
+@router_alias.get("/dashboard/uorgs-acessiveis", response_model=List[Dict[str, Any]])
+async def listar_uorgs_acessiveis_dashboard(
+    usuario: Dict[str, Any] = Depends(get_current_user_profile),
+    provider: RelatorioGestaoProviderInterface = Depends(get_relatorio_gestao_provider)
+):
+    """Lista as UORGs permitidas para seleção no Dashboard conforme hierarquia do usuário logado."""
+    return await controller.listar_uorgs_acessiveis_dashboard(usuario, provider)
+
+
+@router.get("/dashboard/metricas/{uorg_id}", response_model=Dict[str, Any])
+@router_alias.get("/dashboard/metricas/{uorg_id}", response_model=Dict[str, Any])
+async def obter_metricas_dashboard_uorg(
+    uorg_id: int,
+    exercicio_id: Optional[int] = None,
+    usuario: Dict[str, Any] = Depends(get_current_user_profile),
+    provider: RelatorioGestaoProviderInterface = Depends(get_relatorio_gestao_provider)
+):
+    """Retorna métricas de entregas concluídas e série histórica de indicadores com metas para a UORG selecionada."""
+    return await controller.obter_metricas_dashboard(
+        uorg_id=uorg_id,
+        exercicio_id=exercicio_id,
+        usuario_logado=usuario,
+        provider=provider
+    )
+
+
 

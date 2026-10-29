@@ -76,7 +76,7 @@ class PrazoExcepcional(Base):
     exercicio_id = Column(Integer, ForeignKey('exercicios.id'), nullable=False)
     bimestre_id = Column(Integer, ForeignKey('bimestres.id'), nullable=False)
     uorg_id = Column(Integer, ForeignKey('uorgs.id'), nullable=False)
-    motivo = Column(String(1000), nullable=False)
+    motivo = Column(String(1000), nullable=True)
     data_inicio = Column(DateTime, nullable=False, default=datetime.utcnow)
     data_fim = Column(DateTime, nullable=False)
     concedido_por_username = Column(String(100), nullable=False)

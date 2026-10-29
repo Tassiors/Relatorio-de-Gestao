@@ -77,9 +77,31 @@ router.beforeEach((to, _from, next: NavigationGuardNext) => {
 
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     next({ name: 'Login' });
-  } else {
-    next();
+    return;
   }
+
+  const perfil = (authStore.gestaoProfile?.perfil || '').toUpperCase();
+  const tipoUorg = (authStore.gestaoProfile?.tipo_uorg || 'SETOR').toUpperCase();
+
+  if (perfil) {
+    // Chefe de Setor não acessa Matriz de Acompanhamento
+    if (to.path === '/matriz' && ['CHEFE', 'CHEFE_UORG'].includes(perfil) && tipoUorg !== 'DIVISAO') {
+      next({ path: '/' });
+      return;
+    }
+    // Gerente e Superintendente não acessam Planejamento Anual nem Preenchimento Bimestral
+    if ((to.path === '/planejamento' || to.path === '/preenchimento') && ['GERENTE', 'SUPERINTENDENTE'].includes(perfil)) {
+      next({ path: '/consolidado', query: to.query });
+      return;
+    }
+    // Apenas Administrador acessa Gestão de Exercício e Configurações
+    if ((to.path === '/gestao-exercicio' || to.path === '/configuracoes') && perfil !== 'ADMINISTRADOR') {
+      next({ path: '/' });
+      return;
+    }
+  }
+
+  next();
 });
 
 export default router;

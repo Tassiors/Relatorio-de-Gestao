@@ -14,14 +14,33 @@ interface User {
   employeeNumber?: string[];
 }
 
+export interface GestaoProfile {
+  username: string;
+  nome_completo: string;
+  email?: string;
+  perfil: string;
+  gerencia_id?: number | null;
+  gerencia_sigla?: string | null;
+  uorg_id?: number | null;
+  uorg_sigla?: string | null;
+  uorg_nome?: string | null;
+  tipo_uorg?: 'DIVISAO' | 'SETOR' | null;
+  subordinados_siglas?: string[];
+}
+
 export const useAuthStore = defineStore('auth', () => {
   const accessToken = ref(localStorage.getItem('accessToken') || null);
   const user = ref<User | null>(null);
+  const gestaoProfile = ref<GestaoProfile | null>(null);
 
   const isAuthenticated = computed(() => !!accessToken.value);
   const isAdmin = computed(() => {
     const ADMIN_GROUP = "GLO-SEC-HCPE-SETISD"; 
-    return user.value?.groups?.includes(ADMIN_GROUP) || false;
+    return (
+      gestaoProfile.value?.perfil === 'ADMINISTRADOR' ||
+      user.value?.groups?.includes(ADMIN_GROUP) ||
+      false
+    );
   });
 
   function setToken(token: string) {
@@ -33,6 +52,7 @@ export const useAuthStore = defineStore('auth', () => {
     accessToken.value = null;
     localStorage.removeItem('accessToken');
     user.value = null;
+    gestaoProfile.value = null;
   }
 
   function setUser(userData: User | null) {
@@ -42,11 +62,18 @@ export const useAuthStore = defineStore('auth', () => {
   async function fetchUser() {
     if (!accessToken.value) {
       setUser(null);
+      gestaoProfile.value = null;
       return;
     }
     try {
       const { data } = await api.get('/api/users/me');
       setUser(data);
+      try {
+        const { data: gestaoData } = await api.get('/api/gestao/me');
+        gestaoProfile.value = gestaoData;
+      } catch {
+        // Ignora se endpoint de gestão não estiver disponível em contexto isolado
+      }
     } catch (error) {
       console.error("Failed to fetch user info:", error);
       clearToken(); // Clear token if user info fetch fails
@@ -103,6 +130,7 @@ export const useAuthStore = defineStore('auth', () => {
   return { 
     accessToken, 
     user, 
+    gestaoProfile,
     isAuthenticated, 
     isAdmin, 
     login, 

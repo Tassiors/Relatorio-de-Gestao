@@ -2,6 +2,13 @@
 from typing import List, Dict, Any, Optional
 from fastapi import HTTPException
 from ..providers.interfaces.relatorio_gestao_provider_interface import RelatorioGestaoProviderInterface
+from ..providers.implementations.relatorio_gestao_sqlite_provider import (
+    DIVISAO_SUBORDINADAS_MAP,
+    SETOR_PAI_MAP,
+    obter_tipo_uorg,
+    obter_subordinados_siglas,
+)
+from ..helpers.indicador_helper import obter_configuracao_periodicidade, validar_itens_indicador_bimestre
 
 def calcular_atingimento_meta(
     operador: str,
@@ -39,8 +46,41 @@ async def obter_exercicio_ativo(provider: RelatorioGestaoProviderInterface) -> D
         raise HTTPException(status_code=404, detail="Nenhum exercício ativo encontrado.")
     return ex
 
-async def obter_matriz(exercicio_id: int, provider: RelatorioGestaoProviderInterface) -> Dict[str, Any]:
-    return await provider.obter_matriz_acompanhamento(exercicio_id)
+async def obter_matriz(
+    exercicio_id: int,
+    provider: RelatorioGestaoProviderInterface,
+    usuario_logado: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    matriz = await provider.obter_matriz_acompanhamento(exercicio_id)
+    if not usuario_logado:
+        return matriz
+
+    perfil = (usuario_logado.get("perfil") or "").upper()
+    if perfil in ["ADMINISTRADOR", "SUPERINTENDENTE"]:
+        return matriz
+
+    uorgs_permitidas = await listar_uorgs_acessiveis_dashboard(usuario_logado, provider)
+    ids_permitidos = {int(u["id"]) for u in uorgs_permitidas}
+
+    linhas_filtradas = [l for l in matriz.get("linhas", []) if int(l["uorg_id"]) in ids_permitidos]
+    totais = {"enviados": 0, "pendentes": 0, "em_edicao": 0, "prazo_excepcional": 0}
+    for l in linhas_filtradas:
+        for b in l.get("bimestres", []):
+            st = b.get("status")
+            if st == "PRAZO_EXCEPCIONAL":
+                totais["prazo_excepcional"] += 1
+            elif st == "ENVIADO":
+                totais["enviados"] += 1
+            elif st == "EM_EDICAO":
+                totais["em_edicao"] += 1
+            elif st in ["PENDENTE", "RASCUNHO"]:
+                totais["pendentes"] += 1
+
+    return {
+        **matriz,
+        "linhas": linhas_filtradas,
+        "totais": totais
+    }
 
 async def obter_relatorio(
     exercicio_id: int, bimestre_id: int, uorg_id: int, provider: RelatorioGestaoProviderInterface
@@ -54,10 +94,50 @@ async def obter_relatorio(
     indicadores = await provider.listar_indicadores_uorg(exercicio_id, uorg_id)
     uorg = await provider.obter_uorg_por_id(uorg_id)
     bimestres = await provider.obter_bimestres(exercicio_id)
-    bimestre_atual = next((b for b in bimestres if b["id"] == bimestre_id), None)
+    bims_map = {b["id"]: b for b in bimestres}
+    bimestre_atual = bims_map.get(bimestre_id)
+    bim_atual_num = bimestre_atual["numero"] if bimestre_atual else bimestre_id
 
-    # Filtrar apenas entregas ainda pendentes (RN-ENT-01)
-    entregas_pendentes = [e for e in entregas if not e["concluida"]]
+    itens_entrega_inicial = []
+    for e in entregas:
+        bim_conc_id = e.get("bimestre_conclusao_id")
+        bim_conc = bims_map.get(bim_conc_id) if bim_conc_id else None
+        bim_conc_num = bim_conc["numero"] if bim_conc else None
+        concluida_ant = bool(e.get("concluida") and bim_conc_num is not None and bim_conc_num < bim_atual_num)
+        concluida_atual = bool(e.get("concluida") and (bim_conc_id == bimestre_id or concluida_ant))
+        itens_entrega_inicial.append({
+            "id": None,
+            "entrega_id": e["id"],
+            "titulo": e["titulo"],
+            "concluida": concluida_atual,
+            "concluida_anteriormente": concluida_ant,
+            "bimestre_conclusao_id": bim_conc_id,
+            "bimestre_conclusao_nome": bim_conc["nome"] if bim_conc else None,
+            "observacoes": ""
+        })
+
+    itens_indicador_inicial = []
+    for i in indicadores:
+        cfg = obter_configuracao_periodicidade(i["periodicidade"], bim_atual_num)
+        for comp in cfg["competencias"]:
+            itens_indicador_inicial.append({
+                "id": None,
+                "indicador_id": i["id"],
+                "nome": i["nome"],
+                "descricao": i["descricao"],
+                "periodicidade": i["periodicidade"],
+                "unidade_medida": i["unidade_medida"],
+                "meta_operador": i["meta_operador"],
+                "meta_valor": i["meta_valor"],
+                "meta_valor_max": i["meta_valor_max"],
+                "competencia": comp,
+                "valor_apurado": None,
+                "meta_atingida": None,
+                "resultado_indisponivel": False,
+                "justificativa_indisponibilidade": "",
+                "nao_aplicavel": not cfg["aplicavel"],
+                "orientacao_periodicidade": cfg["orientacao"]
+            })
 
     return {
         "id": None,
@@ -75,36 +155,8 @@ async def obter_relatorio(
         "destaques": "",
         "dificuldades": "",
         "prazo_excepcional": None,
-        "itens_entrega": [
-            {
-                "id": None,
-                "entrega_id": e["id"],
-                "titulo": e["titulo"],
-                "concluida": False,
-                "observacoes": ""
-            }
-            for e in entregas_pendentes
-        ],
-        "itens_indicador": [
-            {
-                "id": None,
-                "indicador_id": i["id"],
-                "nome": i["nome"],
-                "descricao": i["descricao"],
-                "periodicidade": i["periodicidade"],
-                "unidade_medida": i["unidade_medida"],
-                "meta_operador": i["meta_operador"],
-                "meta_valor": i["meta_valor"],
-                "meta_valor_max": i["meta_valor_max"],
-                "competencia": bimestre_atual["nome"] if bimestre_atual else "Bimestre",
-                "valor_apurado": None,
-                "meta_atingida": None,
-                "resultado_indisponivel": False,
-                "justificativa_indisponibilidade": "",
-                "nao_aplicavel": False
-            }
-            for i in indicadores
-        ],
+        "itens_entrega": itens_entrega_inicial,
+        "itens_indicador": itens_indicador_inicial,
         "feedbacks": []
     }
 
@@ -114,9 +166,12 @@ async def salvar_rascunho(
     uorg_id: int,
     dados: Dict[str, Any],
     usuario: str,
-    provider: RelatorioGestaoProviderInterface
+    provider: RelatorioGestaoProviderInterface,
+    usuario_logado: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """Salva o progresso do relatório sem validação rígida de envio formal (RF-REL-05/06)."""
+    if usuario_logado:
+        validar_escopo_uorg(usuario_logado, uorg_id, apenas_leitura=False)
     # Calcular automaticamente atingimento de metas para os valores informados
     for item in dados.get("itens_indicador", []):
         if not item.get("resultado_indisponivel") and not item.get("nao_aplicavel"):
@@ -132,11 +187,14 @@ async def enviar_relatorio(
     relatorio_id: int,
     dados_finais: Dict[str, Any],
     usuario: str,
-    provider: RelatorioGestaoProviderInterface
+    provider: RelatorioGestaoProviderInterface,
+    usuario_logado: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
     Realiza o envio formal do relatório bimestral validando requisitos obrigatórios (RF-REL-03/07).
     """
+    if usuario_logado:
+        validar_escopo_uorg(usuario_logado, dados_finais["uorg_id"], apenas_leitura=False)
     # 1. Salvar antes do envio para garantir estado atualizado
     rel_atualizado = await provider.salvar_rascunho(
         dados_finais["exercicio_id"],
@@ -147,21 +205,14 @@ async def enviar_relatorio(
     )
 
     # 2. Validações pré-envio
-    pendencias = []
+    bimestres = await provider.obter_bimestres(dados_finais["exercicio_id"])
+    bim_atual = next((b for b in bimestres if b["id"] == dados_finais["bimestre_id"]), None)
+    bim_num = bim_atual["numero"] if bim_atual else dados_finais["bimestre_id"]
 
-    # Validar indicadores
-    for item in rel_atualizado.get("itens_indicador", []):
-        if item.get("nao_aplicavel"):
-            continue
-        if item.get("resultado_indisponivel"):
-            just = (item.get("justificativa_indisponibilidade") or "").strip()
-            if len(just) < 10:
-                pendencias.append(
-                    f"Indicador '{item.get('nome')}': justificativa de indisponibilidade deve conter no mínimo 10 caracteres."
-                )
-        else:
-            if item.get("valor_apurado") is None:
-                pendencias.append(f"Indicador '{item.get('nome')}': valor apurado não foi informado.")
+    pendencias = validar_itens_indicador_bimestre(
+        rel_atualizado.get("itens_indicador", []),
+        bim_num
+    )
 
     # Validar Destaques e Dificuldades
     destaques = (rel_atualizado.get("destaques") or "").strip()
@@ -215,32 +266,62 @@ async def conceder_prazo_excepcional(
     exercicio_id: int,
     bimestre_id: int,
     uorg_id: int,
-    motivo: str,
+    motivo: Optional[str],
     data_fim: str,
     usuario_logado: Dict[str, Any],
     provider: RelatorioGestaoProviderInterface
 ) -> Dict[str, Any]:
     """
-    Concede prazo excepcional com motivo estritamente obrigatório (RF-PEX-01/02 & Decisão validada).
+    Concede prazo excepcional com motivo opcional (RF-PEX-01/02 & Refinamento de UX).
     """
     perfil = usuario_logado.get("perfil", "")
     if perfil not in ["ADMINISTRADOR", "SUPERINTENDENTE"]:
         raise HTTPException(status_code=403, detail="Apenas o Administrador pode conceder prazo excepcional.")
 
-    if not motivo or len(motivo.strip()) < 10:
-        raise HTTPException(
-            status_code=400,
-            detail="O motivo da concessão de prazo excepcional é obrigatório e deve ter no mínimo 10 caracteres."
-        )
+    motivo_limpo = motivo.strip() if motivo and motivo.strip() else None
 
     return await provider.conceder_prazo_excepcional(
         exercicio_id=exercicio_id,
         bimestre_id=bimestre_id,
         uorg_id=uorg_id,
-        motivo=motivo.strip(),
+        motivo=motivo_limpo,
         data_fim=data_fim,
         usuario=usuario_logado.get("username", "admin")
     )
+
+async def atualizar_bimestre(
+    bimestre_id: int,
+    status: Optional[str],
+    data_fechamento_regular: Optional[str],
+    usuario_logado: Dict[str, Any],
+    provider: RelatorioGestaoProviderInterface
+) -> Dict[str, Any]:
+    """
+    Permite ao Administrador alterar manualmente o status (ABERTO/FECHADO) e a data limite de fechamento do bimestre.
+    """
+    perfil = usuario_logado.get("perfil", "")
+    if perfil != "ADMINISTRADOR":
+        raise HTTPException(
+            status_code=403,
+            detail="Apenas o Administrador pode alterar o status ou a data de fechamento de um bimestre."
+        )
+
+    if status is not None and status not in ["ABERTO", "FECHADO", "AGUARDANDO"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Status de bimestre inválido. Utilize ABERTO ou FECHADO."
+        )
+
+    try:
+        bim_atualizado = await provider.atualizar_bimestre(
+            bimestre_id=bimestre_id,
+            status=status,
+            data_fechamento_regular=data_fechamento_regular
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    return bim_atualizado
 
 async def listar_notificacoes(
     usuario_logado: Dict[str, Any],
@@ -518,4 +599,118 @@ async def alterar_status_exercicio(
         "dados_anteriores": {"status": ex_antigo["status"]},
         "dados_novos": {"status": novo_status}
     }
+
+
+# ---------------------------------------------------------
+# Dashboard: Hierarquia de UORGs e Métricas Consolidadas
+# ---------------------------------------------------------
+
+async def listar_uorgs_acessiveis_dashboard(
+    usuario_logado: Dict[str, Any],
+    provider: RelatorioGestaoProviderInterface
+) -> List[Dict[str, Any]]:
+    """
+    Retorna as UORGs acessíveis ao usuário no seletor do Dashboard respeitando a hierarquia:
+    - ADMINISTRADOR / SUPERINTENDENTE: todas as UORGs ativas.
+    - GERENTE: UORGs vinculadas à sua Gerência.
+    - CHEFE / CHEFE_UORG: sua própria UORG e eventuais setores subordinados (se for Divisão).
+    Inclui também o resumo de entregas concluídas (X/Y) de cada UORG para os cards compactos.
+    """
+    estrutura = await provider.listar_gerencias_com_uorgs()
+    todas_uorgs: List[Dict[str, Any]] = []
+    for g in estrutura:
+        for u in g.get("uorgs", []):
+            todas_uorgs.append({
+                "id": u["id"],
+                "sigla": u["sigla"],
+                "nome": u["nome"],
+                "tipo_uorg": u.get("tipo_uorg") or obter_tipo_uorg(u["sigla"], u["nome"]),
+                "uorg_pai_sigla": u.get("uorg_pai_sigla") or SETOR_PAI_MAP.get((u["sigla"] or "").upper()),
+                "subordinados_siglas": u.get("subordinados_siglas") or obter_subordinados_siglas(u["sigla"]),
+                "gerencia_id": g["id"],
+                "gerencia_sigla": g["sigla"],
+                "gerencia_nome": g["nome"]
+            })
+
+    perfil = (usuario_logado.get("perfil") or "").upper()
+    user_uorg_id = usuario_logado.get("uorg_id")
+    user_gerencia_id = usuario_logado.get("gerencia_id")
+
+    filtradas = todas_uorgs
+    if perfil in ["ADMINISTRADOR", "SUPERINTENDENTE"]:
+        filtradas = todas_uorgs
+    elif perfil == "GERENTE":
+        if user_gerencia_id:
+            por_g = [u for u in todas_uorgs if int(u["gerencia_id"]) == int(user_gerencia_id)]
+            if por_g:
+                filtradas = por_g
+        elif user_uorg_id:
+            uorg_propria = next((u for u in todas_uorgs if int(u["id"]) == int(user_uorg_id)), None)
+            if uorg_propria:
+                filtradas = [u for u in todas_uorgs if int(u["gerencia_id"]) == int(uorg_propria["gerencia_id"])]
+    else:
+        # CHEFE / CHEFE_UORG / outros
+        if user_uorg_id:
+            uorg_propria = next((u for u in todas_uorgs if int(u["id"]) == int(user_uorg_id)), None)
+            if uorg_propria:
+                sigla_prop = (uorg_propria["sigla"] or "").upper()
+                siglas_sub = DIVISAO_SUBORDINADAS_MAP.get(sigla_prop, [sigla_prop])
+                filtradas = [u for u in todas_uorgs if (u["sigla"] or "").upper() in siglas_sub]
+        elif user_gerencia_id:
+            filtradas = [u for u in todas_uorgs if int(u["gerencia_id"]) == int(user_gerencia_id)]
+
+    # Enriquecer com métricas resumidas de entregas (X/Y) do exercício ativo
+    ex = await provider.obter_exercicio_ativo()
+    resumos_map: Dict[int, Dict[str, Any]] = {}
+    if ex and filtradas:
+        resumos_map = await provider.obter_resumo_entregas_por_uorgs(
+            ex["id"], [int(u["id"]) for u in filtradas]
+        )
+
+    for u in filtradas:
+        r_info = resumos_map.get(int(u["id"]), {})
+        u["concluidas"] = r_info.get("concluidas", 0)
+        u["total"] = r_info.get("total", 0)
+        u["pendentes"] = r_info.get("pendentes", 0)
+        u["percentual_conclusao"] = r_info.get("percentual_conclusao", 0.0)
+        u["relatorios_enviados"] = r_info.get("relatorios_enviados", 0)
+        u["relatorios_com_feedback"] = r_info.get("relatorios_com_feedback", 0)
+        u["tem_feedback"] = r_info.get("tem_feedback", False)
+
+    return filtradas
+
+
+async def obter_metricas_dashboard(
+    uorg_id: int,
+    exercicio_id: Optional[int],
+    usuario_logado: Dict[str, Any],
+    provider: RelatorioGestaoProviderInterface
+) -> Dict[str, Any]:
+    """
+    Obtém métricas de entregas e série histórica de indicadores com metas para a UORG selecionada no Dashboard,
+    validando se a UORG pertence ao escopo hierárquico do usuário.
+    """
+    uorgs_permitidas = await listar_uorgs_acessiveis_dashboard(usuario_logado, provider)
+    ids_permitidos = {int(u["id"]) for u in uorgs_permitidas}
+
+    if int(uorg_id) not in ids_permitidos:
+        raise HTTPException(
+            status_code=403,
+            detail="Acesso negado: esta UORG não pertence à sua hierarquia de visualização."
+        )
+
+    if not exercicio_id:
+        ex = await provider.obter_exercicio_ativo()
+        if not ex:
+            raise HTTPException(status_code=404, detail="Nenhum exercício ativo encontrado.")
+        exercicio_id = ex["id"]
+
+    uorg = await provider.obter_uorg_por_id(uorg_id)
+    if not uorg:
+        raise HTTPException(status_code=404, detail="UORG não encontrada.")
+
+    metricas = await provider.obter_metricas_dashboard_uorg(exercicio_id, uorg_id)
+    metricas["resumo_uorgs_contexto"] = uorgs_permitidas
+    return metricas
+
 

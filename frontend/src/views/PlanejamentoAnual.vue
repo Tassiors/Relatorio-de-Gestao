@@ -4,8 +4,8 @@
     <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
       <div>
         <div class="flex items-center gap-2">
-          <router-link to="/matriz" class="text-indigo-600 hover:text-indigo-800 text-xs font-bold flex items-center gap-1 transition">
-            ← Voltar para Matriz
+          <router-link :to="podeVerMatriz ? '/matriz' : '/'" class="text-indigo-600 hover:text-indigo-800 text-xs font-bold flex items-center gap-1 transition">
+            ← {{ podeVerMatriz ? 'Voltar para Matriz' : 'Voltar para Início' }}
           </router-link>
         </div>
         <h1 class="text-2xl font-black text-slate-900 mt-1 flex items-center gap-2 tracking-tight">
@@ -17,9 +17,9 @@
         </p>
       </div>
 
-      <!-- Seletor de UORG (Admin / Gestores) ou Badge da UORG da Chefia -->
+      <!-- Seletor de UORG (Exclusivo Admin) ou Badge da UORG da Chefia (Setor ou Divisão) -->
       <div class="flex flex-wrap items-center gap-3">
-        <div v-if="isAdminOuGestor" class="flex items-center gap-2">
+        <div v-if="isAdmin" class="flex items-center gap-2">
           <label for="uorgSelect" class="text-xs font-bold text-slate-600">UORG:</label>
           <select
             id="uorgSelect"
@@ -475,13 +475,20 @@
 
             <div>
               <label class="block text-xs font-bold text-slate-700 mb-1">Unidade de Medida *</label>
-              <input
+              <select
                 v-model="formIndicador.unidade_medida"
-                type="text"
                 required
-                placeholder="Ex: % ou Dias ou Pacientes"
-                class="w-full text-xs border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 outline-none"
-              />
+                class="w-full text-xs border border-slate-300 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
+              >
+                <option value="" disabled>Selecione a unidade...</option>
+                <option
+                  v-for="op in opcoesUnidadeMedida"
+                  :key="op.valor"
+                  :value="op.valor"
+                >
+                  {{ op.rotulo }}
+                </option>
+              </select>
             </div>
           </div>
 
@@ -632,6 +639,25 @@ const formEntrega = ref({
 
 const modalIndicadorAberto = ref(false);
 const indicadorEmEdicao = ref<IndicadorPlanejadoItem | null>(null);
+
+const catalogoUnidadesMedida = [
+  { valor: '%', rotulo: '% (Percentual)' },
+  { valor: 'R$', rotulo: 'R$ (Reais)' },
+  { valor: 'Dias', rotulo: 'Dias' },
+  { valor: 'Horas', rotulo: 'Horas' },
+  { valor: 'Minutos', rotulo: 'Minutos' },
+  { valor: 'Pacientes', rotulo: 'Pacientes' },
+  { valor: 'Procedimentos', rotulo: 'Procedimentos' },
+  { valor: 'Atendimentos', rotulo: 'Atendimentos' },
+  { valor: 'Exames', rotulo: 'Exames' },
+  { valor: 'Cirurgias', rotulo: 'Cirurgias' },
+  { valor: 'Leitos', rotulo: 'Leitos' },
+  { valor: 'Unidades', rotulo: 'Unidades (Quantidade)' },
+  { valor: 'Processos', rotulo: 'Processos / Relatórios' },
+  { valor: 'Índice', rotulo: 'Índice / Taxa' },
+  { valor: 'Pontos', rotulo: 'Pontos / Nota' }
+];
+
 const formIndicador = ref({
   nome: '',
   descricao: '',
@@ -642,14 +668,24 @@ const formIndicador = ref({
   meta_valor_max: null as number | null
 });
 
+const opcoesUnidadeMedida = computed(() => {
+  const atual = formIndicador.value.unidade_medida;
+  if (atual && !catalogoUnidadesMedida.some((o) => o.valor === atual)) {
+    return [{ valor: atual, rotulo: atual }, ...catalogoUnidadesMedida];
+  }
+  return catalogoUnidadesMedida;
+});
+
 const modalInativarAberto = ref(false);
 const itemParaInativar = ref<{ id: number; tipo: 'entrega' | 'indicador'; nome: string } | null>(null);
 
-// Computeds de RBAC
-const isAdmin = computed(() => usuario.value?.perfil === 'ADMINISTRADOR');
-const isAdminOuGestor = computed(() =>
-  ['ADMINISTRADOR', 'SUPERINTENDENTE', 'GERENTE'].includes(usuario.value?.perfil)
-);
+// Computeds de RBAC (controle de abertura/fechamento de planejamento exclusivo para ADMINISTRADOR)
+const isAdmin = computed(() => (usuario.value?.perfil || '').toUpperCase() === 'ADMINISTRADOR');
+const podeVerMatriz = computed(() => {
+  const p = (usuario.value?.perfil || '').toUpperCase();
+  const t = (usuario.value?.tipo_uorg || 'SETOR').toUpperCase();
+  return ['ADMINISTRADOR', 'SUPERINTENDENTE', 'GERENTE'].includes(p) || (['CHEFE', 'CHEFE_UORG'].includes(p) && t === 'DIVISAO');
+});
 const podeModificar = computed(() => {
   if (isAdmin.value) return true;
   if (!planejamentoAberto.value) return false;
@@ -695,6 +731,13 @@ async function carregarPlanejamento() {
 
 // Abertura / Fechamento do Planejamento pelo Administrador
 async function abrirJanelaPlanejamento() {
+  if (!isAdmin.value) {
+    mensagemAlerta.value = {
+      tipo: 'erro',
+      texto: 'Apenas usuários com perfil ADMINISTRADOR podem abrir o planejamento anual.'
+    };
+    return;
+  }
   if (!exercicio.value?.id) return;
   salvandoStatus.value = true;
   try {
@@ -716,6 +759,13 @@ async function abrirJanelaPlanejamento() {
 }
 
 async function fecharJanelaPlanejamento() {
+  if (!isAdmin.value) {
+    mensagemAlerta.value = {
+      tipo: 'erro',
+      texto: 'Apenas usuários com perfil ADMINISTRADOR podem encerrar o planejamento anual.'
+    };
+    return;
+  }
   if (!exercicio.value?.id) return;
   salvandoStatus.value = true;
   try {
@@ -812,11 +862,12 @@ function abrirModalNovoIndicador() {
 
 function abrirModalEditarIndicador(ind: IndicadorPlanejadoItem) {
   indicadorEmEdicao.value = ind;
+  const unidNormalizada = ind.unidade_medida === 'PERCENTUAL' ? '%' : (ind.unidade_medida || '%');
   formIndicador.value = {
     nome: ind.nome,
     descricao: ind.descricao || '',
     periodicidade: ind.periodicidade || 'BIMESTRAL',
-    unidade_medida: ind.unidade_medida || '%',
+    unidade_medida: unidNormalizada,
     meta_operador: ind.meta_operador || 'MAIOR_IGUAL',
     meta_valor: ind.meta_valor,
     meta_valor_max: ind.meta_valor_max ?? null
@@ -913,12 +964,14 @@ onMounted(async () => {
     estrutura.value = est;
     exercicio.value = ex;
 
-    // Determinar UORG inicial
+    // Determinar UORG inicial: Chefia (Setor ou Divisão) edita estritamente sua própria UORG
     const uorgQuery = route.query.uorg ? Number(route.query.uorg) : null;
-    if (uorgQuery) {
+    if (me?.perfil === 'ADMINISTRADOR' && uorgQuery) {
       uorgSelecionadaId.value = uorgQuery;
-    } else if (me.uorg_id) {
+    } else if (me?.uorg_id) {
       uorgSelecionadaId.value = me.uorg_id;
+    } else if (uorgQuery) {
+      uorgSelecionadaId.value = uorgQuery;
     } else if (est.length > 0 && est[0].uorgs.length > 0) {
       uorgSelecionadaId.value = est[0].uorgs[0].id;
     }

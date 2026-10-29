@@ -49,6 +49,25 @@
       <span class="block sm:inline">{{ error }}</span>
     </div>
 
+    <!-- Atalhos de Login Rápido (Ambiente de Validação/Homologação) -->
+    <div class="mt-4 bg-white/95 border border-gray-200 rounded-xl p-3.5 shadow-sm">
+      <p class="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2 text-center">
+        Acesso Rápido por Perfil (1 clique — Senha: 123)
+      </p>
+      <div class="flex flex-wrap justify-center gap-1.5">
+        <button
+          v-for="conta in contasTeste"
+          :key="conta.user"
+          type="button"
+          @click="loginRapido(conta.user, conta.pass)"
+          class="px-2.5 py-1 text-[11px] font-bold rounded-lg border transition cursor-pointer"
+          :class="conta.classe"
+        >
+          {{ conta.label }}
+        </button>
+      </div>
+    </div>
+
     <!-- Rodapé de Versão -->
     <div class="mt-6 text-center text-xs text-gray-400 space-y-1">
       <p class="font-semibold text-gray-300">{{ HOSPITAL_NAME }}</p>
@@ -96,9 +115,28 @@ const handleLogin = async () => {
     await authStore.login(username.value, password.value, rememberMe.value);
     await router.push('/');
   } catch (e: any) {
-    error.value = e.response?.data?.detail || e.message || 'An unknown error occurred';
+    error.value = e.response?.data?.detail || e.message || 'Credenciais inválidas';
   } finally {
     loading.value = false;
   }
+};
+
+const contasTeste = [
+  { label: '👑 Admin', user: 'admin', pass: 'admin', classe: 'bg-slate-800 text-white border-slate-800 hover:bg-slate-700' },
+  { label: '🏛️ Superintendente', user: 'superintendente', pass: '123', classe: 'bg-purple-50 text-purple-800 border-purple-200 hover:bg-purple-100' },
+  { label: '📊 Gerente GAD', user: 'gerente.gad', pass: '123', classe: 'bg-blue-50 text-blue-800 border-blue-200 hover:bg-blue-100' },
+  { label: '🏥 Gerente GAS', user: 'gerente.gas', pass: '123', classe: 'bg-blue-50 text-blue-800 border-blue-200 hover:bg-blue-100' },
+  { label: '🎓 Gerente GEP', user: 'gerente.gep', pass: '123', classe: 'bg-blue-50 text-blue-800 border-blue-200 hover:bg-blue-100' },
+  { label: '📌 Chefe STGQ', user: 'chefe.stgq', pass: '123', classe: 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100' },
+  { label: '💻 Chefe SETISD', user: 'chefe.setisd', pass: '123', classe: 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100' },
+  { label: '💰 Chefe SGOF', user: 'chefe.sgof', pass: '123', classe: 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100' },
+  { label: '⚕️ Chefe DMED', user: 'chefe.dmed', pass: '123', classe: 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100' },
+  { label: '🩺 Chefe DENF', user: 'chefe.denf', pass: '123', classe: 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100' }
+];
+
+const loginRapido = async (u: string, p: string) => {
+  username.value = u;
+  password.value = p;
+  await handleLogin();
 };
 </script>

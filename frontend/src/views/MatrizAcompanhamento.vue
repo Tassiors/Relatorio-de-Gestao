@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="space-y-6">
     <!-- Header -->
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
@@ -27,13 +27,20 @@
     </div>
 
     <!-- Cards de Métricas Consolidadas -->
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
       <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between">
         <div>
           <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Enviados</span>
           <p class="text-2xl font-black text-emerald-600 mt-1">{{ totais.enviados || 0 }}</p>
         </div>
         <div class="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">✓</div>
+      </div>
+      <div class="bg-gradient-to-br from-amber-50 via-yellow-50 to-orange-50 p-4 rounded-xl shadow-sm border-2 border-amber-300 flex items-center justify-between">
+        <div>
+          <span class="text-xs font-black text-amber-900 uppercase tracking-wider">Com Feedback</span>
+          <p class="text-2xl font-black text-amber-700 mt-1">{{ totalComFeedback }}</p>
+        </div>
+        <div class="w-10 h-10 rounded-lg bg-amber-500 text-white flex items-center justify-center font-bold shadow-xs">🏛️</div>
       </div>
       <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between">
         <div>
@@ -60,27 +67,43 @@
 
     <!-- Filtros -->
     <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-wrap items-center justify-between gap-4">
-      <div class="flex items-center gap-2">
-        <span class="text-xs font-bold text-gray-500 uppercase">Filtrar por Gerência:</span>
+      <div class="flex flex-wrap items-center gap-2">
+        <template v-if="gerenciasUnicas.length > 1">
+          <span class="text-xs font-bold text-gray-500 uppercase">Filtrar por Gerência:</span>
+          <button
+            @click="filtroGerencia = ''"
+            :class="filtroGerencia === '' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+            class="px-3 py-1.5 rounded-lg text-xs font-semibold transition"
+          >
+            Todas ({{ linhas.length }})
+          </button>
+          <button
+            v-for="sigla in gerenciasUnicas"
+            :key="sigla"
+            @click="filtroGerencia = sigla"
+            :class="filtroGerencia === sigla ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+            class="px-3 py-1.5 rounded-lg text-xs font-semibold transition"
+          >
+            {{ sigla }}
+          </button>
+        </template>
+
         <button
-          @click="filtroGerencia = ''"
-          :class="filtroGerencia === '' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
-          class="px-3 py-1.5 rounded-lg text-xs font-semibold transition"
+          @click="apenasComFeedback = !apenasComFeedback"
+          :class="apenasComFeedback
+            ? 'bg-amber-500 text-white border-amber-600 shadow-sm'
+            : 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100'"
+          class="px-3 py-1.5 rounded-lg text-xs font-extrabold border transition flex items-center gap-1.5"
         >
-          Todas ({{ linhas.length }})
-        </button>
-        <button
-          v-for="sigla in gerenciasUnicas"
-          :key="sigla"
-          @click="filtroGerencia = sigla"
-          :class="filtroGerencia === sigla ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
-          class="px-3 py-1.5 rounded-lg text-xs font-semibold transition"
-        >
-          {{ sigla }}
+          <span>🏛️</span>
+          <span>Apenas com Feedback Institucional ({{ totalUorgsComFeedback }})</span>
         </button>
       </div>
 
-      <div class="text-xs text-gray-500 flex items-center gap-4">
+      <div class="text-xs text-gray-500 flex flex-wrap items-center gap-4">
+        <span class="flex items-center gap-1.5 font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-300">
+          <span>🏛️</span> Feedback Institucional Emitido
+        </span>
         <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-emerald-500"></span> Enviado</span>
         <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-amber-400"></span> Pendente</span>
         <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-orange-400"></span> Em Edição</span>
@@ -97,7 +120,7 @@
             <tr class="bg-gray-50 border-b border-gray-200 text-xs font-bold text-gray-600 uppercase tracking-wider">
               <th class="p-4 w-28">Gerência</th>
               <th class="p-4 min-w-[200px]">Unidade Organizacional (UORG)</th>
-              <th v-for="b in bimestres" :key="b.id" class="p-4 text-center min-w-[130px]">
+              <th v-for="b in bimestres" :key="b.id" class="p-4 text-center min-w-[140px]">
                 {{ b.nome }}
                 <span class="block text-[10px] font-normal text-gray-400">
                   {{ b.status === 'ABERTO' ? '● Aberto' : '○ Fechado' }}
@@ -111,21 +134,36 @@
                 <span class="px-2 py-1 bg-gray-100 rounded text-gray-700">{{ linha.gerencia_sigla }}</span>
               </td>
               <td class="p-4 font-medium text-gray-900">
-                <div class="font-bold text-sm text-gray-800">{{ linha.uorg_sigla }}</div>
+                <div class="flex items-center gap-1.5">
+                  <span class="font-bold text-sm text-gray-800">{{ linha.uorg_sigla }}</span>
+                  <span
+                    v-if="linha.tipo_uorg === 'DIVISAO'"
+                    class="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200"
+                  >
+                    Divisão
+                  </span>
+                </div>
                 <div class="text-xs text-gray-500 truncate max-w-xs">{{ linha.uorg_nome }}</div>
               </td>
 
               <!-- Células de Bimestres -->
               <td v-for="celula in linha.bimestres" :key="celula.bimestre_id" class="p-3 text-center">
                 <router-link
-                  :to="`/preenchimento?bimestre=${celula.bimestre_id}&uorg=${linha.uorg_id}`"
-                  class="inline-flex flex-col items-center justify-center w-full px-2.5 py-2 rounded-lg border text-xs font-bold transition group"
-                  :class="getCelulaClass(celula.status)"
+                  :to="getDestinoCelula(linha, celula)"
+                  class="inline-flex flex-col items-center justify-center w-full px-2.5 py-2 rounded-xl border text-xs font-bold transition group relative"
+                  :class="getCelulaClass(celula)"
                   :title="`Abrir ${linha.uorg_sigla} - ${celula.bimestre_numero}º Bimestre`"
                 >
                   <span class="flex items-center gap-1">
                     {{ getStatusLabel(celula.status) }}
-                    <span v-if="celula.tem_feedback" title="Possui feedback da gestão" class="text-blue-600">💬</span>
+                  </span>
+                  <span
+                    v-if="celula.tem_feedback"
+                    class="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-xs"
+                    title="Relatório avaliado com Parecer / Feedback Institucional"
+                  >
+                    <span>🏛️</span>
+                    <span>Parecer Emitido</span>
                   </span>
                   <span v-if="celula.data_envio" class="text-[9px] font-normal opacity-80 mt-0.5">
                     {{ formatarData(celula.data_envio) }}
@@ -148,10 +186,26 @@ const bimestres = ref<any[]>([]);
 const linhas = ref<any[]>([]);
 const totais = ref<any>({});
 const filtroGerencia = ref('');
+const apenasComFeedback = ref(false);
 const exercicioAtivoId = ref<number | null>(null);
+const usuarioLogado = ref<any>(null);
 
 const excelMatrizUrl = computed(() => {
   return gestaoApi.getExcelMatrizUrl(exercicioAtivoId.value || undefined);
+});
+
+const totalComFeedback = computed(() => {
+  let count = 0;
+  for (const l of linhas.value) {
+    for (const b of l.bimestres || []) {
+      if (b.tem_feedback) count++;
+    }
+  }
+  return count;
+});
+
+const totalUorgsComFeedback = computed(() => {
+  return linhas.value.filter(l => (l.bimestres || []).some((b: any) => b.tem_feedback)).length;
 });
 
 const gerenciasUnicas = computed(() => {
@@ -163,13 +217,31 @@ const gerenciasUnicas = computed(() => {
 });
 
 const linhasFiltradas = computed(() => {
-  if (!filtroGerencia.value) return linhas.value;
-  return linhas.value.filter(l => l.gerencia_sigla === filtroGerencia.value);
+  return linhas.value.filter(l => {
+    if (filtroGerencia.value && l.gerencia_sigla !== filtroGerencia.value) return false;
+    if (apenasComFeedback.value && !(l.bimestres || []).some((b: any) => b.tem_feedback)) return false;
+    return true;
+  });
 });
+
+function getDestinoCelula(linha: any, celula: any): string {
+  const perfil = (usuarioLogado.value?.perfil || '').toUpperCase();
+  if (perfil === 'ADMINISTRADOR') {
+    return `/consolidado?bimestre=${celula.bimestre_id}&uorg=${linha.uorg_id}`;
+  }
+  if (['CHEFE', 'CHEFE_UORG'].includes(perfil) && Number(linha.uorg_id) === Number(usuarioLogado.value?.uorg_id)) {
+    return `/preenchimento?bimestre=${celula.bimestre_id}&uorg=${linha.uorg_id}`;
+  }
+  return `/consolidado?bimestre=${celula.bimestre_id}&uorg=${linha.uorg_id}`;
+}
 
 async function carregarMatriz() {
   try {
-    const data = await gestaoApi.obterMatriz();
+    const [me, data] = await Promise.all([
+      gestaoApi.obterUsuarioLogado(),
+      gestaoApi.obterMatriz()
+    ]);
+    usuarioLogado.value = me;
     exercicioAtivoId.value = data.exercicio_id;
     bimestres.value = data.bimestres;
     linhas.value = data.linhas;
@@ -179,8 +251,11 @@ async function carregarMatriz() {
   }
 }
 
-function getCelulaClass(status: string) {
-  switch (status) {
+function getCelulaClass(celula: any) {
+  if (celula.tem_feedback) {
+    return 'bg-gradient-to-br from-amber-50 via-yellow-50 to-emerald-50 text-emerald-900 border-2 border-amber-400 ring-2 ring-amber-200/70 shadow-sm hover:shadow-md';
+  }
+  switch (celula.status) {
     case 'ENVIADO':
       return 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300';
     case 'PENDENTE':

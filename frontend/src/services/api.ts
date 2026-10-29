@@ -41,9 +41,11 @@ api.interceptors.response.use(
   async error => {
     const originalRequest = error.config;
     const authStore = useAuthStore();
+    const reqUrl = String(originalRequest?.url || '');
+    const isAuthRoute = reqUrl.includes('/api/login') || reqUrl.includes('/api/token/refresh') || reqUrl.includes('/api/logout');
 
-    // Check if the error is 401 and it's not a retry request
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    // Check if the error is 401 and it's not a retry request (and not an auth endpoint itself)
+    if (error.response?.status === 401 && !originalRequest._retry && !isAuthRoute) {
       if (isRefreshing) {
         return new Promise(function(resolve, reject) {
           failedQueue.push({ resolve, reject });

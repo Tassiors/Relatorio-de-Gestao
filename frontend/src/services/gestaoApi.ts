@@ -16,6 +16,7 @@ export interface IndicadorItem {
   resultado_indisponivel: boolean;
   justificativa_indisponibilidade?: string;
   nao_aplicavel: boolean;
+  orientacao_periodicidade?: string;
 }
 
 export interface EntregaItem {
@@ -23,6 +24,9 @@ export interface EntregaItem {
   entrega_id: number;
   titulo: string;
   concluida: boolean;
+  concluida_anteriormente?: boolean;
+  bimestre_conclusao_id?: number | null;
+  bimestre_conclusao_nome?: string | null;
   observacoes?: string;
 }
 
@@ -148,8 +152,26 @@ export const gestaoApi = {
     return res.data;
   },
 
-  async concederPrazoExcepcional(payload: { exercicio_id: number; bimestre_id: number; uorg_id: number; motivo: string; data_fim: string }) {
+  async concederPrazoExcepcional(payload: { exercicio_id: number; bimestre_id: number; uorg_id: number; motivo?: string; data_fim: string }) {
     const res = await api.post('/api/gestao/prazos-excepcionais', payload);
+    return res.data;
+  },
+
+  async atualizarBimestre(bimestreId: number, payload: { status?: string; data_fechamento_regular?: string | null }) {
+    const res = await api.put(`/api/gestao/bimestres/${bimestreId}`, payload);
+    return res.data;
+  },
+
+  async obterUorgsAcessiveisDashboard() {
+    const res = await api.get('/api/relatorios-gestao/dashboard/uorgs-acessiveis');
+    return res.data;
+  },
+
+  async obterMetricasDashboardUorg(uorgId: number, exercicioId?: number) {
+    const url = exercicioId
+      ? `/api/relatorios-gestao/dashboard/metricas/${uorgId}?exercicio_id=${exercicioId}`
+      : `/api/relatorios-gestao/dashboard/metricas/${uorgId}`;
+    const res = await api.get(url);
     return res.data;
   },
 

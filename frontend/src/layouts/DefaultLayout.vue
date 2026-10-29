@@ -1,7 +1,7 @@
 <template>
-  <div class="relative h-screen overflow-hidden md:flex">
+  <div class="relative h-screen overflow-hidden md:flex print:h-auto print:overflow-visible print:block">
     <!-- Mobile Menu Header -->
-    <div class="bg-paper-sidebar text-gray-100 flex justify-between md:hidden shrink-0">
+    <div class="bg-paper-sidebar text-gray-100 flex justify-between md:hidden shrink-0 print:hidden">
       <router-link to="/" class="block p-4 text-white font-bold">{{ SYSTEM_TITLE }}</router-link>
       <button @click="sidebarOpen = !sidebarOpen" class="p-4 focus:outline-none focus:bg-paper-active-link">
         <Bars3Icon class="h-6 w-6" />
@@ -14,14 +14,14 @@
         sidebarOpen ? 'translate-x-0' : '-translate-x-full',
         isCollapsed ? 'md:w-20' : 'md:w-64'
       ]" 
-      class="bg-paper-sidebar text-gray-100 pt-7 pb-2 px-2 absolute inset-y-0 left-0 transform md:relative md:translate-x-0 transition-all duration-300 ease-in-out z-20 h-full shrink-0 flex flex-col justify-between"
+      class="bg-paper-sidebar text-gray-100 pt-7 pb-2 px-2 absolute inset-y-0 left-0 transform md:relative md:translate-x-0 transition-all duration-300 ease-in-out z-20 h-full shrink-0 flex flex-col justify-between print:hidden"
     >
       <div>
         <!-- Clique em Nome do Sistema recolhe/expande a barra lateral -->
         <div 
           @click="toggleSidebar" 
           title="Clique para recolher / expandir o menu"
-          class="cursor-pointer text-white flex items-center space-x-3 px-3 mb-6 hover:opacity-90 transition duration-150 group"
+          class="cursor-pointer text-white flex items-center space-x-3 px-3 mb-4 hover:opacity-90 transition duration-150 group"
         >
           <CubeTransparentIcon class="h-8 w-8 shrink-0 group-hover:scale-105 transition-transform" />
           <span v-if="!isCollapsed" class="text-xl font-extrabold leading-snug break-words select-none">
@@ -29,33 +29,39 @@
           </span>
         </div>
 
-        <div class="px-3 my-4">
+        <!-- Badge do Perfil / Unidade no Menu Lateral -->
+        <div v-if="!isCollapsed && perfilLabel" class="px-3 mb-3">
+          <div class="bg-white/10 border border-white/15 rounded-xl px-3 py-2 text-[11px] text-gray-200 space-y-0.5">
+            <div class="font-extrabold text-white tracking-wide uppercase flex items-center justify-between">
+              <span>{{ perfilLabel }}</span>
+              <span v-if="uorgSiglaUsuario" class="px-1.5 py-0.5 rounded bg-indigo-500/40 text-indigo-100 text-[10px]">
+                {{ uorgSiglaUsuario }}
+              </span>
+            </div>
+            <p v-if="escopoDescricaoMenu" class="text-[10px] text-gray-300 leading-tight">
+              {{ escopoDescricaoMenu }}
+            </p>
+          </div>
+        </div>
+
+        <div class="px-3 my-3">
           <div class="border-t border-white border-opacity-20"></div>
         </div>
 
-        <!-- Links de Navegacao -->
+        <!-- Links de Navegacao Filtrados por Perfil e Tipo de UORG -->
         <nav class="space-y-1.5">
           <router-link 
             to="/" 
-            :title="isCollapsed ? 'Inicio' : ''"
+            :title="isCollapsed ? 'Início' : ''"
             :class="[isCollapsed ? 'justify-center px-2' : 'px-4']"
             class="flex items-center space-x-3 py-2.5 rounded transition duration-200 hover:bg-paper-active-link hover:text-white"
           >
             <HomeIcon class="h-5 w-5 shrink-0"/>
-            <span v-if="!isCollapsed" class="truncate text-sm font-medium">Inicio</span>
+            <span v-if="!isCollapsed" class="truncate text-sm font-medium">Início</span>
           </router-link>
 
           <router-link 
-            to="/matriz" 
-            :title="isCollapsed ? 'Matriz de Acompanhamento' : ''"
-            :class="[isCollapsed ? 'justify-center px-2' : 'px-4']"
-            class="flex items-center space-x-3 py-2.5 rounded transition duration-200 hover:bg-paper-active-link hover:text-white"
-          >
-            <TableCellsIcon class="h-5 w-5 shrink-0" />
-            <span v-if="!isCollapsed" class="truncate text-sm font-medium">Matriz de Acompanhamento</span>
-          </router-link>
-
-          <router-link 
+            v-if="exibirPlanejamento"
             to="/planejamento" 
             :title="isCollapsed ? 'Planejamento Anual' : ''"
             :class="[isCollapsed ? 'justify-center px-2' : 'px-4']"
@@ -66,6 +72,7 @@
           </router-link>
 
           <router-link 
+            v-if="exibirPreenchimento"
             to="/preenchimento"
             :title="isCollapsed ? 'Preenchimento Bimestral' : ''"
             :class="[isCollapsed ? 'justify-center px-2' : 'px-4']"
@@ -76,35 +83,47 @@
           </router-link>
 
           <router-link 
+            v-if="exibirVisaoConsolidada"
             to="/consolidado"
-            :title="isCollapsed ? 'Visao Consolidada' : ''"
+            :title="isCollapsed ? 'Visão Consolidada' : ''"
             :class="[isCollapsed ? 'justify-center px-2' : 'px-4']"
             class="flex items-center space-x-3 py-2.5 rounded transition duration-200 hover:bg-paper-active-link hover:text-white"
           >
             <DocumentChartBarIcon class="h-5 w-5 shrink-0" />
-            <span v-if="!isCollapsed" class="truncate text-sm font-medium">Visao Consolidada</span>
+            <span v-if="!isCollapsed" class="truncate text-sm font-medium">Visão Consolidada</span>
           </router-link>
 
           <router-link 
-            v-if="authStore.isAuthenticated" 
+            v-if="exibirMatriz"
+            to="/matriz" 
+            :title="isCollapsed ? 'Matriz de Acompanhamento' : ''"
+            :class="[isCollapsed ? 'justify-center px-2' : 'px-4']"
+            class="flex items-center space-x-3 py-2.5 rounded transition duration-200 hover:bg-paper-active-link hover:text-white"
+          >
+            <TableCellsIcon class="h-5 w-5 shrink-0" />
+            <span v-if="!isCollapsed" class="truncate text-sm font-medium">Matriz de Acompanhamento</span>
+          </router-link>
+
+          <router-link 
+            v-if="exibirAdminOpcoes" 
             to="/gestao-exercicio" 
-            :title="isCollapsed ? 'Gestao de Exercicio' : ''"
+            :title="isCollapsed ? 'Gestão de Exercício' : ''"
             :class="[isCollapsed ? 'justify-center px-2' : 'px-4']"
             class="flex items-center space-x-3 py-2.5 rounded transition duration-200 hover:bg-paper-active-link hover:text-white"
           >
             <CalendarDaysIcon class="h-5 w-5 shrink-0" />
-            <span v-if="!isCollapsed" class="truncate text-sm font-medium">Gestao de Exercicio</span>
+            <span v-if="!isCollapsed" class="truncate text-sm font-medium">Gestão de Exercício</span>
           </router-link>
           
           <router-link 
-            v-if="authStore.isAuthenticated" 
+            v-if="exibirAdminOpcoes" 
             to="/configuracoes" 
-            :title="isCollapsed ? 'Configuracoes' : ''"
+            :title="isCollapsed ? 'Configurações' : ''"
             :class="[isCollapsed ? 'justify-center px-2' : 'px-4']"
             class="flex items-center space-x-3 py-2.5 rounded transition duration-200 hover:bg-paper-active-link hover:text-white"
           >
             <Cog6ToothIcon class="h-5 w-5 shrink-0"/>
-            <span v-if="!isCollapsed" class="truncate text-sm font-medium">Configuracoes</span>
+            <span v-if="!isCollapsed" class="truncate text-sm font-medium">Configurações</span>
           </router-link>
         </nav>
       </div>
@@ -120,8 +139,8 @@
     </aside>
 
     <!-- Content -->
-    <div class="flex-1 flex flex-col bg-paper-bg overflow-y-auto h-full">
-      <header class="flex justify-between items-center p-6 bg-white/80 backdrop-blur-md border-b border-gray-300 sticky top-0 z-10">
+    <div class="flex-1 flex flex-col bg-paper-bg overflow-y-auto h-full print:overflow-visible print:h-auto print:bg-white">
+      <header class="flex justify-between items-center p-6 bg-white/80 backdrop-blur-md border-b border-gray-300 sticky top-0 z-10 print:hidden">
         <div>
           <h1 class="text-2xl font-semibold text-paper-text">{{ $route.name }}</h1>
         </div>
@@ -227,6 +246,76 @@ const notificacoes = ref<any[]>([]);
 
 const route = useRoute();
 const authStore = useAuthStore();
+const localProfile = ref<any>(null);
+
+const perfilEfetivo = computed(() => {
+  const p = authStore.gestaoProfile?.perfil || localProfile.value?.perfil || (authStore.isAdmin ? 'ADMINISTRADOR' : '');
+  return (p || '').toUpperCase();
+});
+
+const tipoUorgEfetivo = computed(() => {
+  const t = authStore.gestaoProfile?.tipo_uorg || localProfile.value?.tipo_uorg || 'SETOR';
+  return (t || 'SETOR').toUpperCase();
+});
+
+const uorgSiglaUsuario = computed(() => {
+  return authStore.gestaoProfile?.uorg_sigla || localProfile.value?.uorg_sigla || authStore.gestaoProfile?.gerencia_sigla || localProfile.value?.gerencia_sigla || null;
+});
+
+const perfilLabel = computed(() => {
+  if (!authStore.isAuthenticated) return '';
+  if (perfilEfetivo.value === 'ADMINISTRADOR') return 'Administrador';
+  if (perfilEfetivo.value === 'SUPERINTENDENTE') return 'Superintendente';
+  if (perfilEfetivo.value === 'GERENTE') return 'Gerente';
+  if (['CHEFE', 'CHEFE_UORG'].includes(perfilEfetivo.value)) {
+    return tipoUorgEfetivo.value === 'DIVISAO' ? 'Chefe de Divisão' : 'Chefe de Setor';
+  }
+  return perfilEfetivo.value;
+});
+
+const escopoDescricaoMenu = computed(() => {
+  if (perfilEfetivo.value === 'ADMINISTRADOR') return 'Acesso total ao sistema';
+  if (perfilEfetivo.value === 'SUPERINTENDENTE') return 'Visão global de todas as UORGs';
+  if (perfilEfetivo.value === 'GERENTE') return 'Divisões e Setores subordinados';
+  if (['CHEFE', 'CHEFE_UORG'].includes(perfilEfetivo.value)) {
+    return tipoUorgEfetivo.value === 'DIVISAO'
+      ? 'Divisão e Setores subordinados'
+      : 'Gestão exclusiva do Setor';
+  }
+  return '';
+});
+
+// Regras de exibição do Menu Lateral conforme especificação OpenSpec:
+// - Chefe de Setor: Início, Planejamento Anual, Preenchimento Bimestral, Visão Consolidada
+// - Chefe de Divisão: Início, Planejamento Anual, Preenchimento Bimestral, Visão Consolidada, Matriz de Acompanhamento
+// - Gerente: Início, Matriz de Acompanhamento, Visão Consolidada
+// - Superintendente: Início, Matriz de Acompanhamento, Visão Consolidada
+// - Administrador: Todas as opções
+const exibirPlanejamento = computed(() => {
+  if (!authStore.isAuthenticated) return false;
+  return perfilEfetivo.value === 'ADMINISTRADOR' || ['CHEFE', 'CHEFE_UORG'].includes(perfilEfetivo.value);
+});
+
+const exibirPreenchimento = computed(() => {
+  if (!authStore.isAuthenticated) return false;
+  return perfilEfetivo.value === 'ADMINISTRADOR' || ['CHEFE', 'CHEFE_UORG'].includes(perfilEfetivo.value);
+});
+
+const exibirVisaoConsolidada = computed(() => {
+  return authStore.isAuthenticated;
+});
+
+const exibirMatriz = computed(() => {
+  if (!authStore.isAuthenticated) return false;
+  if (['ADMINISTRADOR', 'SUPERINTENDENTE', 'GERENTE'].includes(perfilEfetivo.value)) return true;
+  if (['CHEFE', 'CHEFE_UORG'].includes(perfilEfetivo.value) && tipoUorgEfetivo.value === 'DIVISAO') return true;
+  return false;
+});
+
+const exibirAdminOpcoes = computed(() => {
+  if (!authStore.isAuthenticated) return false;
+  return perfilEfetivo.value === 'ADMINISTRADOR';
+});
 
 const toggleSidebar = () => {
   isCollapsed.value = !isCollapsed.value;
@@ -240,10 +329,15 @@ const naoLidasCount = computed(() => {
   return notificacoes.value.filter(n => !n.lida).length;
 });
 
-const carregarNotificacoes = async () => {
+const carregarContextoMenu = async () => {
   if (!authStore.isAuthenticated) return;
   try {
-    const data = await gestaoApi.listarNotificacoes();
+    const [me, data] = await Promise.all([
+      gestaoApi.obterUsuarioLogado(),
+      gestaoApi.listarNotificacoes()
+    ]);
+    localProfile.value = me;
+    authStore.gestaoProfile = me;
     notificacoes.value = data || [];
   } catch {
     // Ignora
@@ -275,7 +369,11 @@ watch(() => route.path, () => {
   dropdownNotificacoesAberto.value = false;
 });
 
+watch(() => authStore.accessToken, () => {
+  carregarContextoMenu();
+});
+
 onMounted(() => {
-  carregarNotificacoes();
+  carregarContextoMenu();
 });
 </script>

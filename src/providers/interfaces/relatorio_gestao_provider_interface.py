@@ -129,3 +129,23 @@ class RelatorioGestaoProviderInterface(ABC):
     ) -> Dict[str, Any]:
         pass
 
+    @abstractmethod
+    async def atualizar_bimestre(
+        self, bimestre_id: int, status: Optional[str] = None, data_fechamento_regular: Optional[str] = None
+    ) -> Dict[str, Any]:
+        pass
+
+    @abstractmethod
+    async def obter_metricas_dashboard_uorg(
+        self, exercicio_id: int, uorg_id: int
+    ) -> Dict[str, Any]:
+        pass
+
+    @abstractmethod
+    async def obter_resumo_entregas_por_uorgs(
+        self, exercicio_id: int, uorgs_ids: List[int]
+    ) -> Dict[int, Dict[str, Any]]:
+        pass
+
+
+

@@ -45,8 +45,14 @@ class PrazoExcepcionalSchema(BaseModel):
     exercicio_id: int
     bimestre_id: int
     uorg_id: int
-    motivo: str = Field(..., min_length=10)
+    motivo: Optional[str] = None
     data_fim: str = Field(...)
+
+PrazoExcepcionalCreate = PrazoExcepcionalSchema
+
+class AtualizarBimestreSchema(BaseModel):
+    status: Optional[str] = None
+    data_fechamento_regular: Optional[str] = None
 
 class CriarEntregaSchema(BaseModel):
     uorg_id: int

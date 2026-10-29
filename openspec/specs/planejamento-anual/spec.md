@@ -39,10 +39,10 @@ O sistema SHALL permitir a edição do título e a inativação lógica de entre
 - **THEN** o sistema marca o registro como inativo (ativo = False) preservando a integridade histórica
 
 ### Requirement: Cadastro de indicadores com validação de limites
-O sistema SHALL permitir o cadastro de no mínimo 1 e no máximo 3 indicadores ativos por UORG, validando nome, meta numérica, operador, unidade e periodicidade.
+O sistema SHALL permitir o cadastro de no mínimo 1 e no máximo 3 indicadores ativos por UORG, validando nome, meta numérica, operador, unidade de medida selecionada exclusivamente via dropdown com opções padronizadas e periodicidade.
 
 #### Scenario: Inclusão válida de indicador
-- **WHEN** o Chefe cadastra indicador com meta numérica, operador válido (>=, <=, =, ENTRE) e periodicidade
+- **WHEN** o Chefe cadastra indicador selecionando uma unidade de medida válida a partir da lista suspensa (dropdown), informa meta numérica, operador válido (>=, <=, =, ENTRE) e periodicidade
 - **THEN** o sistema grava o indicador vinculado à UORG com sucesso
 
 #### Scenario: Limite máximo de indicadores excedido
@@ -50,7 +50,7 @@ O sistema SHALL permitir o cadastro de no mínimo 1 e no máximo 3 indicadores a
 - **THEN** o sistema SHALL rejeitar o cadastro com HTTP 400 informando que o limite de 3 indicadores foi atingido
 
 ### Requirement: Controle da janela de planejamento pelo Administrador
-O sistema SHALL permitir que apenas usuários com perfil ADMINISTRADOR abram ou encerrem a janela de planejamento anual do exercício.
+O sistema SHALL permitir que apenas usuários com perfil ADMINISTRADOR visualizem os controles de ação e abram ou encerrem a janela de planejamento anual do exercício.
 
 #### Scenario: Administrador abre janela de planejamento
 - **WHEN** o Administrador altera o status do exercício para PLANEJAMENTO
